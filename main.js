@@ -170,13 +170,26 @@ async function readLocalSession(sessionPath) {
 
 async function writeLocalSession(sessionPath, creds, keys) {
   try {
+    // ✅ VALIDATION
+    if (!creds || typeof creds !== 'object') {
+      logErr('writeLocalSession', 'creds is not an object');
+      return false;
+    }
+    if (!creds.me || !creds.me.id) {
+      logErr('writeLocalSession', 'creds.me.id missing — session is incomplete');
+      return false;
+    }
+
     await fs.ensureDir(sessionPath);
     await fs.writeJson(path.join(sessionPath, 'creds.json'), creds, { spaces: 2 });
+
     if (keys && typeof keys === 'object') {
       for (const [filename, content] of Object.entries(keys)) {
         await fs.writeJson(path.join(sessionPath, filename), content, { spaces: 2 });
       }
     }
+
+    logOk('writeLocalSession', `Wrote creds + ${Object.keys(keys || {}).length} key files`);
     return true;
   } catch (e) {
     logErr('writeLocalSession', e.message);
@@ -189,8 +202,35 @@ async function syncSessionToDB(sanitizedNumber, sessionPath) {
   try {
     const data = await readLocalSession(sessionPath);
     if (!data) return false;
+
+    // ✅ VALIDATION: Hakikisha creds ni kamili
+    if (!data.creds || typeof data.creds !== 'object') {
+      logWarn(sanitizedNumber, 'Cannot sync: creds is not an object');
+      return false;
+    }
+    if (!data.creds.me || !data.creds.me.id) {
+      logWarn(sanitizedNumber, 'Cannot sync: creds.me.id missing (not fully registered)');
+      return false;
+    }
+    if (!data.creds.noiseKey || !data.creds.signedIdentityKey) {
+      logWarn(sanitizedNumber, 'Cannot sync: encryption keys missing');
+      return false;
+    }
+
+    // ✅ VALIDATION: Hakikisha keys zina session records
+    const keyFiles = Object.keys(data.keys || {});
+    const hasSessionKeys = keyFiles.some(k => k.startsWith('session-'));
+    const hasPreKeys = keyFiles.some(k => k.startsWith('pre-key-'));
+
+    if (!hasSessionKeys && !hasPreKeys) {
+      logWarn(sanitizedNumber, 'Cannot sync: no session/pre-key files in keys', {
+        keyFiles: keyFiles.slice(0, 5)
+      });
+      return false;
+    }
+
     await sessionDB.saveSession(sanitizedNumber, data.creds, data.keys);
-    logOk(sanitizedNumber, '💾 Session synced to DB');
+    logOk(sanitizedNumber, `💾 Session synced to DB (${keyFiles.length} keys)`);
     return true;
   } catch (e) {
     logWarn(sanitizedNumber, `DB sync error: ${e.message}`);
@@ -232,9 +272,15 @@ async function kavixmdminibotmessagehandler(socket, number) {
         return;
       }
 
+      // Ignore messages from self (bot's own messages)
+      if (msg.key.fromMe) {
+        logDebug(number, '⏭️ Skipped: fromMe');
+        return;
+      }
+
       logInfo(number, '✅ Processing message...');
 
-      const setting = await storageAPI.getSettings(number);
+      const setting = (await storageAPI.getSettings(number)) || {};
       const remoteJid = msg.key.remoteJid;
       const jidNumber = remoteJid.split('@')[0];
       const isGroup = remoteJid.endsWith('@g.us');
@@ -243,21 +289,16 @@ async function kavixmdminibotmessagehandler(socket, number) {
       const text = msgContent || '';
 
       logDebug(number, 'Settings/context', {
-        worktype: setting?.worktype,
+        worktype: setting?.worktype || 'public',
         jidNumber,
         isGroup,
         isOwner,
         msgContent: msgContent.slice(0, 50)
       });
 
-      // Ignore messages from self (bot's own messages)
-      if (msg.key.fromMe) {
-        logDebug(number, '⏭️ Skipped: fromMe');
-        return;
-      }
-
       if (!isOwner) {
-        switch (setting.worktype) {
+        const worktype = setting.worktype || 'public';
+        switch (worktype) {
           case 'private':
             if (jidNumber !== number) { logDebug(number, '⏭️ Blocked: private mode'); return; }
             break;
@@ -370,7 +411,6 @@ async function kavixmdminibotmessagehandler(socket, number) {
 
       const cmd = getCommand(commandName);
       logDebug(number, `getCommand('${commandName}') =>`, cmd ? `FOUND (${cmd.name})` : 'NOT FOUND');
-      logDebug(number, 'All loaded commands:', Array.from(commands.keys()));
 
       if (!cmd) {
         logWarn(number, `Unknown command: ${commandName}`);
@@ -393,7 +433,14 @@ async function kavixmdminibotmessagehandler(socket, number) {
       } catch (err) {
         logErr(number, `Command "${commandName}" error:`, err.message);
         logErr(number, err.stack);
-        try { await ctx.reply("An error has occurred, Please try again."); } catch (e) {}
+
+        // Kama ni encryption error, futa session
+        if (err.message?.includes('Cannot convert undefined or null')) {
+          logWarn(number, 'Encryption keys corrupted — session needs re-pairing');
+          try { await ctx.replyText('⚠️ Session imeharibika. Tafadhali pair upya.'); } catch (e) {}
+        } else {
+          try { await ctx.reply("An error has occurred, Please try again."); } catch (e) {}
+        }
       }
     } catch (outerErr) {
       logErr(number, 'messages.upsert handler error:', outerErr.message);
@@ -539,12 +586,12 @@ async function uploadCredsToMega(credsPath) {
   return await fileNode.link();
 }
 
-// ==================== CORE BOT ====================
-async function cyberkaviminibot(number, res) {
+// ==================== CORE BOT (silabot) ====================
+async function silabot(number, res) {
   const sanitizedNumber = number.replace(/[^0-9]/g, '');
   const sessionPath = path.join(SESSION_BASE_PATH, `session_${sanitizedNumber}`);
 
-  logInfo(sanitizedNumber, '🚀 Starting bot...');
+  logInfo(sanitizedNumber, '🚀 silabot starting...');
 
   try {
     await storageAPI.saveSettings(sanitizedNumber);
@@ -587,8 +634,15 @@ async function cyberkaviminibot(number, res) {
     socket.ev.on('creds.update', async () => {
       try {
         await saveCreds();
-        logDebug(sanitizedNumber, 'creds.update saved');
-        await syncSessionToDB(sanitizedNumber, sessionPath);
+        logDebug(sanitizedNumber, 'creds.update saved locally');
+
+        // Save DB TU baada ya socket kuwa na user (registered)
+        if (socket.user?.id) {
+          await syncSessionToDB(sanitizedNumber, sessionPath);
+          logDebug(sanitizedNumber, 'creds.update synced to DB');
+        } else {
+          logDebug(sanitizedNumber, 'creds.update NOT synced — socket.user not ready');
+        }
       } catch (e) {
         logErr(sanitizedNumber, 'creds.update save error', e.message);
       }
@@ -630,7 +684,7 @@ async function cyberkaviminibot(number, res) {
             case DisconnectReason.restartRequired:
               responseStatus.error = 'WhatsApp requires restart';
               try { socket.ws?.close(); } catch (e) {}
-              setTimeout(() => { cyberkaviminibot(sanitizedNumber, res); }, 2000);
+              setTimeout(() => { silabot(sanitizedNumber, res); }, 2000);
               break;
             default:
               responseStatus.error = shouldReconnect ? 'Unexpected disconnection. Attempting to reconnect...' : 'Connection terminated. Please try pairing again.';
@@ -854,7 +908,11 @@ async function startAllSessions() {
         if (!credsExist && sessionDB.isConfigured()) {
           const dbRes = await sessionDB.getSession(sanitizedNumber);
           if (dbRes.success && dbRes.session) {
-            await writeLocalSession(sessionPath, dbRes.session.creds, dbRes.session.keys);
+            const written = await writeLocalSession(sessionPath, dbRes.session.creds, dbRes.session.keys);
+            if (!written) {
+              logErr(sanitizedNumber, 'Failed to restore session — skipping (needs re-pairing)');
+              continue;
+            }
             logOk(sanitizedNumber, '☁️ Restored from DB API');
           } else if (sessionId) {
             const dl = await sessionDownload(sessionId, sanitizedNumber);
@@ -877,7 +935,7 @@ async function startAllSessions() {
           continue;
         }
 
-        await cyberkaviminibot(sanitizedNumber, { headersSent: true, status: () => ({ send: () => {} }) });
+        await silabot(sanitizedNumber, { headersSent: true, status: () => ({ send: () => {} }) });
       } catch (err) {
         logErr('SYSTEM', 'startAllSessions loop error:', err.message);
       }
@@ -900,9 +958,33 @@ router.get('/', async (req, res) => {
 
     if (activeSockets.has(sanitizedNumber)) return res.status(200).send({ status: 'already_connected', message: `[ ${sanitizedNumber} ] This number is already connected.` });
 
-    await cyberkaviminobot(number, res);
+    await silabot(number, res);
   } catch (err) {
     logErr('ROUTER', 'router / error:', err.message);
+    logErr('ROUTER', err.stack);
+    try { res.status(500).send({ status: 'error', message: 'Internal Server Error' }); } catch (e) {}
+  }
+});
+
+// Route ya /code (kama unatumia hii)
+router.get('/code', async (req, res) => {
+  try {
+    const { number } = req.query;
+    if (!number) return res.status(400).send({ status: 'error', message: 'Number parameter is required' });
+
+    const sanitizedNumber = number.replace(/[^0-9]/g, '');
+    if (!sanitizedNumber || sanitizedNumber.length < 10) {
+      return res.status(400).send({ status: 'error', message: 'Invalid phone number format' });
+    }
+
+    if (activeSockets.has(sanitizedNumber)) {
+      return res.status(200).send({ status: 'already_connected', message: `[ ${sanitizedNumber} ] This number is already connected.` });
+    }
+
+    await silabot(number, res);
+  } catch (err) {
+    logErr('ROUTER', 'router /code error:', err.message);
+    logErr('ROUTER', err.stack);
     try { res.status(500).send({ status: 'error', message: 'Internal Server Error' }); } catch (e) {}
   }
 });
@@ -948,6 +1030,23 @@ router.get('/debug/health', (req, res) => {
   });
 });
 
+router.get('/debug/clear-sessions', async (req, res) => {
+  try {
+    const folders = await fs.readdir(SESSION_BASE_PATH);
+    const removed = [];
+    for (const folder of folders) {
+      if (folder.startsWith('session_')) {
+        await fs.remove(path.join(SESSION_BASE_PATH, folder));
+        removed.push(folder);
+        console.log(`Removed: ${folder}`);
+      }
+    }
+    res.json({ status: 'ok', message: 'Sessions cleared', removed });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
 // ==================== PROCESS EVENTS ====================
 process.on('exit', async () => {
   for (const [number, socket] of activeSockets.entries()) {
@@ -976,4 +1075,4 @@ loadCommands()
   })
   .catch(err => logErr('SYSTEM', 'Failed to load commands:', err));
 
-module.exports = { router, startAllSessions, loadCommands };
+module.exports = { router, startAllSessions, loadCommands, silabot };
