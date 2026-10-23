@@ -1,337 +1,39 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>𝚂𝙸𝙻𝙰 𝙼𝙳 - Pair Code Generator</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-
-        .container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            padding: 40px;
-            max-width: 500px;
-            width: 100%;
-            text-align: center;
-        }
-
-        .logo {
-            width: 80px;
-            height: 80px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            border-radius: 50%;
-            margin: 0 auto 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 30px;
-            color: white;
-            font-weight: bold;
-        }
-
-        h1 {
-            color: #333;
-            margin-bottom: 10px;
-            font-size: 28px;
-        }
-
-        .subtitle {
-            color: #666;
-            margin-bottom: 30px;
-            font-size: 16px;
-        }
-
-        .form-group {
-            margin-bottom: 25px;
-            text-align: left;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: #333;
-            font-weight: 600;
-        }
-
-        .input-container {
-            position: relative;
-        }
-
-        input[type="tel"] {
-            width: 100%;
-            padding: 15px 20px;
-            border: 2px solid #e1e5e9;
-            border-radius: 10px;
-            font-size: 16px;
-            transition: all 0.3s ease;
-            background: #f8f9fa;
-        }
-
-        input[type="tel"]:focus {
-            outline: none;
-            border-color: #667eea;
-            background: white;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .country-code {
-            position: absolute;
-            left: 20px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #666;
-            font-weight: 600;
-            pointer-events: none;
-        }
-
-        input[type="tel"] {
-            padding-left: 60px;
-        }
-
-        .btn {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            width: 100%;
-            margin-bottom: 20px;
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
-        }
-
-        .btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
-
-        .result {
-            margin-top: 20px;
-            padding: 20px;
-            border-radius: 10px;
-            font-weight: 600;
-            display: none;
-        }
-
-        .result.success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .result.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-
-        .result.info {
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
-
-        .code-display {
-            font-size: 24px;
-            font-weight: bold;
-            margin: 10px 0;
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border: 2px dashed #667eea;
-            letter-spacing: 3px;
-        }
-
-        .loading {
-            display: none;
-            margin: 20px 0;
-        }
-
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .instructions {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            margin-top: 20px;
-            text-align: left;
-        }
-
-        .instructions h3 {
-            color: #333;
-            margin-bottom: 15px;
-        }
-
-        .instructions ol {
-            color: #666;
-            line-height: 1.6;
-        }
-
-        .instructions li {
-            margin-bottom: 8px;
-        }
-
-        .footer {
-            margin-top: 30px;
-            color: #666;
-            font-size: 14px;
-        }
-
-        @media (max-width: 600px) {
-            .container {
-                padding: 30px 20px;
-            }
-            
-            h1 {
-                font-size: 24px;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="logo">W</div>
-        <h1>𝚂𝙸𝙻𝙰 𝙼𝙳</h1>
-        <p class="subtitle">Generate WhatsApp Pairing Code</p>
-        
-        <form id="pairForm">
-            <div class="form-group">
-                <div class="input-container">
-                    <span class="country-code">+</span>
-                    <input 
-                        type="tel" 
-                        id="phoneNumber" 
-                        placeholder="Enter your phone number" 
-                        required
-                        pattern="[0-9]{10,15}"
-                        title="Enter a valid phone number (10-15 digits)"
-                    >
-                </div>
-            </div>
-            
-            <button type="submit" class="btn" id="submitBtn">Generate Pair Code</button>
-        </form>
-
-        <div class="loading" id="loading">
-            <div class="spinner"></div>
-            <p>Generating pair code...</p>
-        </div>
-
-        <div class="result" id="result"></div>
-
-    </div>
-
-    <script>
-        const form = document.getElementById('pairForm');
-        const phoneInput = document.getElementById('phoneNumber');
-        const submitBtn = document.getElementById('submitBtn');
-        const loading = document.getElementById('loading');
-        const result = document.getElementById('result');
-
-        // Format phone number input
-        phoneInput.addEventListener('input', function(e) {
-            let value = e.target.value.replace(/\D/g, '');
-            e.target.value = value;
-        });
-
-        form.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const phoneNumber = phoneInput.value.trim();
-            
-            if (!phoneNumber || phoneNumber.length < 10) {
-                showResult('Please enter a valid phone number (at least 10 digits)', 'error');
-                return;
-            }
-
-            // Show loading state
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Generating...';
-            loading.style.display = 'block';
-            result.style.display = 'none';
-
-            try {
-                const response = await fetch(`/code?number=${encodeURIComponent(phoneNumber)}`);
-                const data = await response.json();
-
-                if (response.ok) {
-                    if (data.status === 'pairing_code_sent' && data.code) {
-                        showResult(`
-                            <strong>Pair Code Generated Successfully!</strong><br>
-                            <div class="code-display">${data.code}</div>
-                            <p>Enter this code in WhatsApp to connect your device.</p>
-                        `, 'success');
-                    } else if (data.status === 'connected') {
-                        showResult(`
-                            <strong>Already Connected!</strong><br>
-                            <p>This number is already connected to WhatsApp.</p>
-                        `, 'info');
-                    } else {
-                        showResult(data.message || 'Connection successful!', 'success');
-                    }
-                } else {
-                    showResult(data.message || 'Failed to generate pair code', 'error');
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                showResult('Network error. Please check your connection and try again.', 'error');
-            } finally {
-                // Reset button state
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Generate Pair Code';
-                loading.style.display = 'none';
-            }
-        });
-
-        function showResult(message, type) {
-            result.innerHTML = message;
-            result.className = `result ${type}`;
-            result.style.display = 'block';
-            
-            // Scroll to result
-            result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-
-        // Auto-focus on phone input
-        phoneInput.focus();
-    </script>
-</body>
-</html>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#090611">
+<title>𝚂𝙸𝙻𝙰 𝙼𝙳 — Pair Code Generator</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23090611'/%3E%3Ctext x='50' y='68' font-size='60' text-anchor='middle' fill='%23c084fc'%3ES%3C/text%3E%3C/svg%3E">
+<style>
+:root{--bg:#08060e;--panel:#110b1b;--panel2:#1b1028;--text:#faf6ff;--muted:#b8acc8;--line:#38234b;--accent:#a855f7;--accent2:#7c3aed;--glow:#a855f733;--field:#0c0812}
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:Inter,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:.3s}body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(ellipse at 10% 0%,var(--glow),transparent 40%),radial-gradient(ellipse at 100% 100%,#6d28d922,transparent 38%)}
+.page{width:min(1080px,94%);margin:auto}.topbar{display:flex;align-items:center;justify-content:space-between;padding:20px 0;border-bottom:1px solid var(--line)}.brand{display:flex;align-items:center;gap:10px;font-weight:900;letter-spacing:1px}.brand em{font-style:normal;color:var(--accent)}.logo{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),var(--accent2));font-size:22px;box-shadow:0 0 28px var(--glow)}button,input{font:inherit}.theme{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:10px 13px;cursor:pointer}
+.hero{text-align:center;padding:36px 0 22px}.tag{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:8px 13px;color:var(--accent);font-size:.78rem;font-weight:800;letter-spacing:1.5px;background:var(--panel)}h1{font-size:clamp(2.1rem,7vw,4.5rem);line-height:1.04;letter-spacing:-2px;margin:18px 0 12px;font-weight:950}h1 span{background:linear-gradient(100deg,var(--accent),#f0abfc,#fff);background-clip:text;color:transparent}.subtitle{max-width:650px;margin:auto;color:var(--muted);line-height:1.75}
+.gifts{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;margin:25px 0}.gift{border:1px solid var(--line);border-radius:17px;padding:18px;background:linear-gradient(145deg,var(--panel2),var(--panel));min-height:130px}.gift-icon{font-size:25px;color:var(--accent);margin-bottom:10px}.gift h3{font-size:1rem;margin-bottom:7px}.gift p{font-size:.84rem;color:var(--muted);line-height:1.55}
+.grid{display:grid;grid-template-columns:1.1fr .9fr;gap:18px;align-items:start}.panel{border:1px solid var(--line);border-radius:22px;padding:clamp(20px,4vw,30px);background:linear-gradient(145deg,var(--panel),var(--panel2));box-shadow:0 20px 65px #0003}.panel-head{display:flex;gap:12px;align-items:center;margin-bottom:22px}.panel-icon{width:47px;height:47px;display:grid;place-items:center;border:1px solid var(--line);border-radius:15px;color:var(--accent);font-size:24px;background:var(--glow);flex-shrink:0}.panel h2{font-size:1.2rem;margin-bottom:5px}.panel-head p{color:var(--muted);font-size:.85rem;line-height:1.5}label{display:block;font-weight:750;font-size:.9rem;margin-bottom:9px}.input-wrap{position:relative;margin-bottom:17px}.prefix{position:absolute;left:15px;top:50%;transform:translateY(-50%);color:var(--accent);font-weight:900}.phone{width:100%;border:1px solid var(--line);border-radius:13px;background:var(--field);color:var(--text);padding:15px 14px 15px 38px;outline:none}.phone:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--glow)}.hint{font-size:.78rem;color:var(--muted);line-height:1.5;margin:-7px 0 17px}.primary{width:100%;padding:15px;border:0;border-radius:13px;background:linear-gradient(110deg,var(--accent2),var(--accent));color:white;font-weight:850;cursor:pointer;box-shadow:0 10px 28px var(--glow)}.primary:disabled{opacity:.55;cursor:wait}.loading{display:none;text-align:center;margin:22px 0 5px;color:var(--muted);font-size:.86rem}.spinner{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px}@keyframes spin{to{transform:rotate(360deg)}}.result{display:none;margin-top:18px;padding:15px;border-radius:13px;line-height:1.6;font-size:.9rem;overflow-wrap:anywhere}.result.success{background:#14532d22;border:1px solid #22c55e66;color:#86efac}.result.error{background:#88133722;border:1px solid #fb718566;color:#fda4af}.result.info{background:var(--glow);border:1px solid var(--line);color:var(--text)}.code-display{font-size:clamp(1.5rem,5vw,2rem);letter-spacing:5px;text-align:center;margin:13px 0;padding:16px 8px;border:1px dashed var(--accent);border-radius:12px;background:var(--field);color:var(--accent);font-weight:950}.copy{margin-top:10px;padding:9px 13px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);color:var(--text);cursor:pointer}.notice{margin-top:18px;padding:13px;border:1px solid var(--line);border-radius:12px;color:var(--muted);font-size:.8rem;line-height:1.6}.steps{display:grid;gap:14px}.step{display:flex;gap:12px;align-items:flex-start}.num{display:grid;place-items:center;flex:0 0 30px;height:30px;border-radius:10px;background:var(--glow);color:var(--accent);font-weight:900}.step p{font-size:.87rem;color:var(--muted);line-height:1.6}.step strong{color:var(--text)}.footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:24px 0 30px;margin-top:25px;border-top:1px solid var(--line);color:var(--muted);font-size:.8rem}.footer strong{color:var(--accent)}
+body[data-theme="rose"]{--bg:#10070d;--panel:#1d0b18;--panel2:#2a1022;--text:#fff5fa;--muted:#d1afc1;--line:#51223f;--accent:#f472b6;--accent2:#be185d;--glow:#f472b733;--field:#140811}
+body[data-theme="emerald"]{--bg:#06100e;--panel:#0a1a17;--panel2:#102722;--text:#f0fdf9;--muted:#a8c8bd;--line:#1d4b40;--accent:#34d399;--accent2:#047857;--glow:#34d39930;--field:#07130f}
+body[data-theme="gold"]{--bg:#100d06;--panel:#1c170b;--panel2:#2a2110;--text:#fffbeb;--muted:#cbbf9e;--line:#51401b;--accent:#fbbf24;--accent2:#b45309;--glow:#fbbf2430;--field:#151006}
+@media(max-width:760px){.grid{grid-template-columns:1fr}.gifts{grid-template-columns:1fr}.gift{min-height:0}.hero{padding-top:28px}.footer{justify-content:center;text-align:center}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;scroll-behavior:auto!important;transition:none!important}}
+</style></head>
+<body data-theme="violet"><div class="page">
+<header class="topbar"><a class="brand" href="#"><span class="logo">S</span><span>𝚂𝙸𝙻𝙰 <em>𝙼𝙳</em></span></a><button class="theme" id="themeBtn" type="button">◐ Theme: Violet</button></header>
+<section class="hero"><div class="tag">✦ A SPECIAL CELEBRATION ✦</div><h1>HAPPY BIRTHDAY<br><span>SILA TECH</span></h1><p class="subtitle">Leo ni siku ya kusherehekea mawazo makubwa, ubunifu na safari mpya. Karibu kwenye SILA MD Pair Code Generator — zawadi maalumu yenye muonekano mpya.</p></section>
+<section class="gifts"><article class="gift"><div class="gift-icon">✧</div><h3>Gift of Innovation</h3><p>Kila wazo jipya ni mwanzo wa kitu kikubwa.</p></article><article class="gift"><div class="gift-icon">◇</div><h3>Built for You</h3><p>Muonekano wa kisasa unaolingana na SILA TECH.</p></article><article class="gift"><div class="gift-icon">✦</div><h3>Keep Building</h3><p>Jifunze, tengeneza na endelea kusonga mbele.</p></article></section>
+<section class="grid"><div class="panel"><div class="panel-head"><div class="panel-icon">⌁</div><div><h2>WhatsApp Pair Code</h2><p>Ingiza namba yenye country code bila alama ya +.</p></div></div>
+<form id="pairForm"><label for="phoneNumber">Phone number</label><div class="input-wrap"><span class="prefix">+</span><input class="phone" type="tel" id="phoneNumber" placeholder="2557XXXXXXXX" inputmode="numeric" autocomplete="tel" pattern="[0-9]{10,15}" minlength="10" maxlength="15" required></div><p class="hint">Mfano: Tanzania 2557XXXXXXXX. Tumia namba yako au namba uliyopewa ruhusa kuitumia.</p><button class="primary" id="submitBtn" type="submit">✦ Generate Pair Code</button></form>
+<div class="loading" id="loading" aria-live="polite"><div class="spinner"></div><p>Generating pair code…</p></div><div class="result" id="result" role="status" aria-live="polite"></div><div class="notice">Usimpe mtu mwingine pairing code yako. Code hutengenezwa na backend ya bot yako kupitia route <b>/code?number=...</b>.</div></div>
+<aside class="panel"><div class="panel-head"><div class="panel-icon">▤</div><div><h2>How to connect</h2><p>Fuata hatua hizi baada ya code kupatikana.</p></div></div><div class="steps"><div class="step"><span class="num">01</span><p>Fungua <strong>WhatsApp</strong> kwenye simu yako.</p></div><div class="step"><span class="num">02</span><p>Nenda kwenye <strong>Linked devices</strong> kwenye menyu ya WhatsApp.</p></div><div class="step"><span class="num">03</span><p>Chagua <strong>Link a device</strong> na pairing-code option ikiwa inapatikana.</p></div><div class="step"><span class="num">04</span><p>Fuata maelekezo ya WhatsApp na ingiza code iliyoonyeshwa.</p></div></div><div class="notice">Ikiwa code haipatikani, hakikisha server iko online na endpoint <b>/code</b> imesanidiwa.</div></aside></section>
+<footer class="footer"><span>© <span id="year"></span> <strong>SILA MD</strong> · Powered By Sila Tech</span><span>Dream big · Build better · ✦</span></footer></div>
+<script>
+const form=document.getElementById('pairForm'), phoneInput=document.getElementById('phoneNumber'), submitBtn=document.getElementById('submitBtn'), loading=document.getElementById('loading'), result=document.getElementById('result');
+document.getElementById('year').textContent=new Date().getFullYear();
+const themes=['violet','rose','emerald','gold'], names={violet:'Violet',rose:'Rose',emerald:'Emerald',gold:'Gold'};let themeIndex=0;
+try{const saved=localStorage.getItem('sila-md-theme');if(themes.includes(saved)){themeIndex=themes.indexOf(saved);document.body.dataset.theme=saved;document.getElementById('themeBtn').textContent='◐ Theme: '+names[saved]}}catch(e){}
+document.getElementById('themeBtn').addEventListener('click',()=>{themeIndex=(themeIndex+1)%themes.length;document.body.dataset.theme=themes[themeIndex];document.getElementById('themeBtn').textContent='◐ Theme: '+names[themes[themeIndex]];try{localStorage.setItem('sila-md-theme',themes[themeIndex])}catch(e){}});
+phoneInput.addEventListener('input',e=>e.target.value=e.target.value.replace(/\D/g,'').slice(0,15));
+function showResult(message,type,code){result.replaceChildren();result.className='result '+type;const h=document.createElement('strong');h.textContent=message;result.appendChild(h);if(code){const d=document.createElement('div');d.className='code-display';d.textContent=code;result.appendChild(d);const p=document.createElement('p');p.textContent='Ingiza code hii kwenye WhatsApp ili kuunganisha kifaa chako.';result.appendChild(p);const b=document.createElement('button');b.className='copy';b.type='button';b.textContent='Copy Pair Code';b.onclick=async()=>{try{await navigator.clipboard.writeText(code);b.textContent='Copied ✓'}catch(e){b.textContent='Copy haikufanikiwa'}};result.appendChild(b)}result.style.display='block';result.scrollIntoView({behavior:'smooth',block:'nearest'})}
+form.addEventListener('submit',async e=>{e.preventDefault();const number=phoneInput.value.trim();if(!/^\d{10,15}$/.test(number)){showResult('Tafadhali ingiza namba sahihi yenye tarakimu 10–15.','error');return}submitBtn.disabled=true;submitBtn.textContent='Generating…';loading.style.display='block';result.style.display='none';try{const response=await fetch('/code?number='+encodeURIComponent(number),{headers:{Accept:'application/json'}});let data;try{data=await response.json()}catch(e){throw new Error('Server haikurudisha JSON sahihi. Angalia backend ya /code.')}if(response.ok&&data.status==='pairing_code_sent'&&data.code)showResult('Pair code imetengenezwa kikamilifu!','success',String(data.code));else if(response.ok&&data.status==='connected')showResult('Namba hii tayari imeunganishwa.','info');else showResult(data.message||'Imeshindikana kutengeneza pair code. Angalia server logs.','error')}catch(err){showResult(err.message==='Failed to fetch'?'Imeshindikana kuwasiliana na server. Hakikisha backend iko online na route /code ipo.':err.message,'error')}finally{submitBtn.disabled=false;submitBtn.textContent='✦ Generate Pair Code';loading.style.display='none'}});
+</script></body></html>
