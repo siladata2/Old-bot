@@ -17,6 +17,8 @@ module.exports = {
 
 ╭━━━━━━━━━━━━━━━━●◌
 │ *Status:* ✅ Online
+│ *Owner:* Sila Tech
+│ *Owner No:* 255789661031
 │ *Uptime:* ${hours}h ${minutes}m ${seconds}s
 │ *User:* ${number}
 │ *Version:* 2.0.0
@@ -33,7 +35,7 @@ module.exports = {
         isForwarded: true,
         forwardedNewsletterMessageInfo: {
           newsletterJid: '120363402325089913@newsletter',
-          newsletterName: 'SILA MD',
+          newsletterName: 'SILA TECH',
           serverMessageId: 143,
         }
       }
