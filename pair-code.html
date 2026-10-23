@@ -1,39 +1,1073 @@
+
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="violet">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#090611">
-<title>𝚂𝙸𝙻𝙰 𝙼𝙳 — Pair Code Generator</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23090611'/%3E%3Ctext x='50' y='68' font-size='60' text-anchor='middle' fill='%23c084fc'%3ES%3C/text%3E%3C/svg%3E">
-<style>
-:root{--bg:#08060e;--panel:#110b1b;--panel2:#1b1028;--text:#faf6ff;--muted:#b8acc8;--line:#38234b;--accent:#a855f7;--accent2:#7c3aed;--glow:#a855f733;--field:#0c0812}
-*{box-sizing:border-box;margin:0;padding:0}body{font-family:Inter,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:.3s}body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(ellipse at 10% 0%,var(--glow),transparent 40%),radial-gradient(ellipse at 100% 100%,#6d28d922,transparent 38%)}
-.page{width:min(1080px,94%);margin:auto}.topbar{display:flex;align-items:center;justify-content:space-between;padding:20px 0;border-bottom:1px solid var(--line)}.brand{display:flex;align-items:center;gap:10px;font-weight:900;letter-spacing:1px}.brand em{font-style:normal;color:var(--accent)}.logo{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),var(--accent2));font-size:22px;box-shadow:0 0 28px var(--glow)}button,input{font:inherit}.theme{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:10px 13px;cursor:pointer}
-.hero{text-align:center;padding:36px 0 22px}.tag{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:8px 13px;color:var(--accent);font-size:.78rem;font-weight:800;letter-spacing:1.5px;background:var(--panel)}h1{font-size:clamp(2.1rem,7vw,4.5rem);line-height:1.04;letter-spacing:-2px;margin:18px 0 12px;font-weight:950}h1 span{background:linear-gradient(100deg,var(--accent),#f0abfc,#fff);background-clip:text;color:transparent}.subtitle{max-width:650px;margin:auto;color:var(--muted);line-height:1.75}
-.gifts{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;margin:25px 0}.gift{border:1px solid var(--line);border-radius:17px;padding:18px;background:linear-gradient(145deg,var(--panel2),var(--panel));min-height:130px}.gift-icon{font-size:25px;color:var(--accent);margin-bottom:10px}.gift h3{font-size:1rem;margin-bottom:7px}.gift p{font-size:.84rem;color:var(--muted);line-height:1.55}
-.grid{display:grid;grid-template-columns:1.1fr .9fr;gap:18px;align-items:start}.panel{border:1px solid var(--line);border-radius:22px;padding:clamp(20px,4vw,30px);background:linear-gradient(145deg,var(--panel),var(--panel2));box-shadow:0 20px 65px #0003}.panel-head{display:flex;gap:12px;align-items:center;margin-bottom:22px}.panel-icon{width:47px;height:47px;display:grid;place-items:center;border:1px solid var(--line);border-radius:15px;color:var(--accent);font-size:24px;background:var(--glow);flex-shrink:0}.panel h2{font-size:1.2rem;margin-bottom:5px}.panel-head p{color:var(--muted);font-size:.85rem;line-height:1.5}label{display:block;font-weight:750;font-size:.9rem;margin-bottom:9px}.input-wrap{position:relative;margin-bottom:17px}.prefix{position:absolute;left:15px;top:50%;transform:translateY(-50%);color:var(--accent);font-weight:900}.phone{width:100%;border:1px solid var(--line);border-radius:13px;background:var(--field);color:var(--text);padding:15px 14px 15px 38px;outline:none}.phone:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--glow)}.hint{font-size:.78rem;color:var(--muted);line-height:1.5;margin:-7px 0 17px}.primary{width:100%;padding:15px;border:0;border-radius:13px;background:linear-gradient(110deg,var(--accent2),var(--accent));color:white;font-weight:850;cursor:pointer;box-shadow:0 10px 28px var(--glow)}.primary:disabled{opacity:.55;cursor:wait}.loading{display:none;text-align:center;margin:22px 0 5px;color:var(--muted);font-size:.86rem}.spinner{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px}@keyframes spin{to{transform:rotate(360deg)}}.result{display:none;margin-top:18px;padding:15px;border-radius:13px;line-height:1.6;font-size:.9rem;overflow-wrap:anywhere}.result.success{background:#14532d22;border:1px solid #22c55e66;color:#86efac}.result.error{background:#88133722;border:1px solid #fb718566;color:#fda4af}.result.info{background:var(--glow);border:1px solid var(--line);color:var(--text)}.code-display{font-size:clamp(1.5rem,5vw,2rem);letter-spacing:5px;text-align:center;margin:13px 0;padding:16px 8px;border:1px dashed var(--accent);border-radius:12px;background:var(--field);color:var(--accent);font-weight:950}.copy{margin-top:10px;padding:9px 13px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);color:var(--text);cursor:pointer}.notice{margin-top:18px;padding:13px;border:1px solid var(--line);border-radius:12px;color:var(--muted);font-size:.8rem;line-height:1.6}.steps{display:grid;gap:14px}.step{display:flex;gap:12px;align-items:flex-start}.num{display:grid;place-items:center;flex:0 0 30px;height:30px;border-radius:10px;background:var(--glow);color:var(--accent);font-weight:900}.step p{font-size:.87rem;color:var(--muted);line-height:1.6}.step strong{color:var(--text)}.footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:24px 0 30px;margin-top:25px;border-top:1px solid var(--line);color:var(--muted);font-size:.8rem}.footer strong{color:var(--accent)}
-body[data-theme="rose"]{--bg:#10070d;--panel:#1d0b18;--panel2:#2a1022;--text:#fff5fa;--muted:#d1afc1;--line:#51223f;--accent:#f472b6;--accent2:#be185d;--glow:#f472b733;--field:#140811}
-body[data-theme="emerald"]{--bg:#06100e;--panel:#0a1a17;--panel2:#102722;--text:#f0fdf9;--muted:#a8c8bd;--line:#1d4b40;--accent:#34d399;--accent2:#047857;--glow:#34d39930;--field:#07130f}
-body[data-theme="gold"]{--bg:#100d06;--panel:#1c170b;--panel2:#2a2110;--text:#fffbeb;--muted:#cbbf9e;--line:#51401b;--accent:#fbbf24;--accent2:#b45309;--glow:#fbbf2430;--field:#151006}
-@media(max-width:760px){.grid{grid-template-columns:1fr}.gifts{grid-template-columns:1fr}.gift{min-height:0}.hero{padding-top:28px}.footer{justify-content:center;text-align:center}}
-@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;scroll-behavior:auto!important;transition:none!important}}
-</style></head>
-<body data-theme="violet"><div class="page">
-<header class="topbar"><a class="brand" href="#"><span class="logo">S</span><span>𝚂𝙸𝙻𝙰 <em>𝙼𝙳</em></span></a><button class="theme" id="themeBtn" type="button">◐ Theme: Violet</button></header>
-<section class="hero"><div class="tag">✦ A SPECIAL CELEBRATION ✦</div><h1>HAPPY BIRTHDAY<br><span>SILA TECH</span></h1><p class="subtitle">Leo ni siku ya kusherehekea mawazo makubwa, ubunifu na safari mpya. Karibu kwenye SILA MD Pair Code Generator — zawadi maalumu yenye muonekano mpya.</p></section>
-<section class="gifts"><article class="gift"><div class="gift-icon">✧</div><h3>Gift of Innovation</h3><p>Kila wazo jipya ni mwanzo wa kitu kikubwa.</p></article><article class="gift"><div class="gift-icon">◇</div><h3>Built for You</h3><p>Muonekano wa kisasa unaolingana na SILA TECH.</p></article><article class="gift"><div class="gift-icon">✦</div><h3>Keep Building</h3><p>Jifunze, tengeneza na endelea kusonga mbele.</p></article></section>
-<section class="grid"><div class="panel"><div class="panel-head"><div class="panel-icon">⌁</div><div><h2>WhatsApp Pair Code</h2><p>Ingiza namba yenye country code bila alama ya +.</p></div></div>
-<form id="pairForm"><label for="phoneNumber">Phone number</label><div class="input-wrap"><span class="prefix">+</span><input class="phone" type="tel" id="phoneNumber" placeholder="2557XXXXXXXX" inputmode="numeric" autocomplete="tel" pattern="[0-9]{10,15}" minlength="10" maxlength="15" required></div><p class="hint">Mfano: Tanzania 2557XXXXXXXX. Tumia namba yako au namba uliyopewa ruhusa kuitumia.</p><button class="primary" id="submitBtn" type="submit">✦ Generate Pair Code</button></form>
-<div class="loading" id="loading" aria-live="polite"><div class="spinner"></div><p>Generating pair code…</p></div><div class="result" id="result" role="status" aria-live="polite"></div><div class="notice">Usimpe mtu mwingine pairing code yako. Code hutengenezwa na backend ya bot yako kupitia route <b>/code?number=...</b>.</div></div>
-<aside class="panel"><div class="panel-head"><div class="panel-icon">▤</div><div><h2>How to connect</h2><p>Fuata hatua hizi baada ya code kupatikana.</p></div></div><div class="steps"><div class="step"><span class="num">01</span><p>Fungua <strong>WhatsApp</strong> kwenye simu yako.</p></div><div class="step"><span class="num">02</span><p>Nenda kwenye <strong>Linked devices</strong> kwenye menyu ya WhatsApp.</p></div><div class="step"><span class="num">03</span><p>Chagua <strong>Link a device</strong> na pairing-code option ikiwa inapatikana.</p></div><div class="step"><span class="num">04</span><p>Fuata maelekezo ya WhatsApp na ingiza code iliyoonyeshwa.</p></div></div><div class="notice">Ikiwa code haipatikani, hakikisha server iko online na endpoint <b>/code</b> imesanidiwa.</div></aside></section>
-<footer class="footer"><span>© <span id="year"></span> <strong>SILA MD</strong> · Powered By Sila Tech</span><span>Dream big · Build better · ✦</span></footer></div>
-<script>
-const form=document.getElementById('pairForm'), phoneInput=document.getElementById('phoneNumber'), submitBtn=document.getElementById('submitBtn'), loading=document.getElementById('loading'), result=document.getElementById('result');
-document.getElementById('year').textContent=new Date().getFullYear();
-const themes=['violet','rose','emerald','gold'], names={violet:'Violet',rose:'Rose',emerald:'Emerald',gold:'Gold'};let themeIndex=0;
-try{const saved=localStorage.getItem('sila-md-theme');if(themes.includes(saved)){themeIndex=themes.indexOf(saved);document.body.dataset.theme=saved;document.getElementById('themeBtn').textContent='◐ Theme: '+names[saved]}}catch(e){}
-document.getElementById('themeBtn').addEventListener('click',()=>{themeIndex=(themeIndex+1)%themes.length;document.body.dataset.theme=themes[themeIndex];document.getElementById('themeBtn').textContent='◐ Theme: '+names[themes[themeIndex]];try{localStorage.setItem('sila-md-theme',themes[themeIndex])}catch(e){}});
-phoneInput.addEventListener('input',e=>e.target.value=e.target.value.replace(/\D/g,'').slice(0,15));
-function showResult(message,type,code){result.replaceChildren();result.className='result '+type;const h=document.createElement('strong');h.textContent=message;result.appendChild(h);if(code){const d=document.createElement('div');d.className='code-display';d.textContent=code;result.appendChild(d);const p=document.createElement('p');p.textContent='Ingiza code hii kwenye WhatsApp ili kuunganisha kifaa chako.';result.appendChild(p);const b=document.createElement('button');b.className='copy';b.type='button';b.textContent='Copy Pair Code';b.onclick=async()=>{try{await navigator.clipboard.writeText(code);b.textContent='Copied ✓'}catch(e){b.textContent='Copy haikufanikiwa'}};result.appendChild(b)}result.style.display='block';result.scrollIntoView({behavior:'smooth',block:'nearest'})}
-form.addEventListener('submit',async e=>{e.preventDefault();const number=phoneInput.value.trim();if(!/^\d{10,15}$/.test(number)){showResult('Tafadhali ingiza namba sahihi yenye tarakimu 10–15.','error');return}submitBtn.disabled=true;submitBtn.textContent='Generating…';loading.style.display='block';result.style.display='none';try{const response=await fetch('/code?number='+encodeURIComponent(number),{headers:{Accept:'application/json'}});let data;try{data=await response.json()}catch(e){throw new Error('Server haikurudisha JSON sahihi. Angalia backend ya /code.')}if(response.ok&&data.status==='pairing_code_sent'&&data.code)showResult('Pair code imetengenezwa kikamilifu!','success',String(data.code));else if(response.ok&&data.status==='connected')showResult('Namba hii tayari imeunganishwa.','info');else showResult(data.message||'Imeshindikana kutengeneza pair code. Angalia server logs.','error')}catch(err){showResult(err.message==='Failed to fetch'?'Imeshindikana kuwasiliana na server. Hakikisha backend iko online na route /code ipo.':err.message,'error')}finally{submitBtn.disabled=false;submitBtn.textContent='✦ Generate Pair Code';loading.style.display='none'}});
-</script></body></html>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#09070f">
+  <meta name="description" content="SILA MD WhatsApp Pairing System — SILA TECH">
+  <title>SILA MD | Pairing System</title>
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%2309070f'/%3E%3Ctext x='50' y='66' font-size='43' font-weight='bold' text-anchor='middle' fill='%23c084fc'%3ES%3C/text%3E%3C/svg%3E">
+
+  <style>
+    :root {
+      --bg: #09070f;
+      --panel: #100c1a;
+      --panel2: #171025;
+      --accent: #b45cff;
+      --accent2: #762cff;
+      --glow: rgba(180, 92, 255, .28);
+      --text: #faf7ff;
+      --muted: #a69bb8;
+      --border: rgba(180, 92, 255, .24);
+      --success: #6dffbd;
+      --danger: #ff728d;
+    }
+
+    [data-theme="rose"] {
+      --accent: #ff78b8;
+      --accent2: #db2777;
+      --glow: rgba(255, 120, 184, .25);
+      --border: rgba(255, 120, 184, .25);
+    }
+
+    [data-theme="emerald"] {
+      --accent: #5ef5bd;
+      --accent2: #059669;
+      --glow: rgba(94, 245, 189, .22);
+      --border: rgba(94, 245, 189, .23);
+    }
+
+    [data-theme="gold"] {
+      --accent: #ffd16b;
+      --accent2: #c28a22;
+      --glow: rgba(255, 209, 107, .22);
+      --border: rgba(255, 209, 107, .25);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      overflow-x: hidden;
+      color: var(--text);
+      background:
+        radial-gradient(ellipse at 50% -10%, var(--glow), transparent 48%),
+        var(--bg);
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+      transition: background .45s, color .35s;
+    }
+
+    button, input { font: inherit; }
+
+    button { cursor: pointer; }
+
+    /* FULL PAGE INTRO LOADER */
+    #intro {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      overflow: hidden;
+      background: #07050c;
+      transition: opacity .8s ease, visibility .8s ease;
+    }
+
+    #intro.hide {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .intro-orb {
+      position: absolute;
+      width: 320px;
+      height: 320px;
+      border-radius: 50%;
+      background: var(--accent);
+      filter: blur(125px);
+      opacity: .22;
+      animation: orbPulse 2s ease-in-out infinite alternate;
+    }
+
+    .intro-content {
+      position: relative;
+      z-index: 2;
+      width: min(90%, 470px);
+      text-align: center;
+      animation: introRise 1s both;
+    }
+
+    .intro-symbol {
+      width: 105px;
+      height: 105px;
+      margin: 0 auto 27px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--accent);
+      border-radius: 31px;
+      color: var(--accent);
+      font-size: 43px;
+      font-weight: 900;
+      background: linear-gradient(145deg, #20152e, #0b0811);
+      box-shadow: 0 0 35px var(--glow), inset 0 0 22px var(--glow);
+      animation: symbolFloat 2s ease-in-out infinite;
+    }
+
+    .intro-title {
+      font-size: clamp(25px, 7vw, 43px);
+      font-weight: 1000;
+      letter-spacing: 3px;
+      background: linear-gradient(90deg, #fff, var(--accent), #fff);
+      background-size: 220% auto;
+      color: transparent;
+      -webkit-background-clip: text;
+      background-clip: text;
+      animation: shine 2s linear infinite;
+    }
+
+    .intro-subtitle {
+      margin-top: 13px;
+      color: #c6b7d8;
+      font-size: 11px;
+      letter-spacing: 4px;
+    }
+
+    .intro-gifts {
+      display: flex;
+      justify-content: center;
+      gap: 22px;
+      margin: 35px 0 30px;
+    }
+
+    .gift {
+      position: relative;
+      width: 39px;
+      height: 31px;
+      border-radius: 4px;
+      background: var(--accent2);
+      box-shadow: 0 0 18px var(--glow);
+      animation: giftBounce 1s ease-in-out infinite;
+    }
+
+    .gift:nth-child(2) { animation-delay: .15s; }
+    .gift:nth-child(3) { animation-delay: .3s; }
+
+    .gift::before {
+      content: "";
+      position: absolute;
+      width: 9px;
+      height: 100%;
+      left: 15px;
+      top: 0;
+      background: var(--accent);
+    }
+
+    .gift::after {
+      content: "";
+      position: absolute;
+      left: -4px;
+      top: -9px;
+      width: 39px;
+      height: 8px;
+      border-radius: 4px;
+      background: var(--accent);
+    }
+
+    .gift i, .gift b {
+      position: absolute;
+      width: 15px;
+      height: 10px;
+      top: -19px;
+      border: 4px solid var(--accent);
+      border-radius: 50% 50% 0 50%;
+    }
+
+    .gift i { left: 5px; transform: rotate(25deg); }
+    .gift b { right: 4px; transform: scaleX(-1) rotate(25deg); }
+
+    .loader-track {
+      width: min(100%, 300px);
+      height: 4px;
+      margin: auto;
+      overflow: hidden;
+      border-radius: 99px;
+      background: #251a32;
+    }
+
+    .loader-progress {
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent2), #fff, var(--accent));
+      box-shadow: 0 0 15px var(--accent);
+      animation: loadProgress 5s linear forwards;
+    }
+
+    .loading-label {
+      margin-top: 16px;
+      font-size: 10px;
+      color: #c3b2d7;
+      letter-spacing: 3px;
+      animation: textBlink 1s infinite;
+    }
+
+    .intro-footer {
+      position: absolute;
+      bottom: 28px;
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: #746481;
+    }
+
+    /* BACKGROUND EFFECTS */
+    .ambient {
+      position: fixed;
+      width: 230px;
+      height: 230px;
+      border-radius: 50%;
+      filter: blur(100px);
+      background: var(--accent2);
+      opacity: .12;
+      pointer-events: none;
+      animation: orbPulse 6s ease-in-out infinite alternate;
+    }
+
+    .ambient.one { top: 30%; left: -150px; }
+    .ambient.two { right: -150px; bottom: 5%; animation-delay: 2s; }
+
+    .page {
+      position: relative;
+      z-index: 1;
+      width: min(100% - 32px, 540px);
+      margin: auto;
+      padding: 24px 0 35px;
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity .8s, transform .8s;
+    }
+
+    .page.ready {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* TOP BAR */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 28px;
+      animation: fadeUp .7s .1s both;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+    }
+
+    .brand-icon {
+      display: grid;
+      place-items: center;
+      width: 43px;
+      height: 43px;
+      border-radius: 14px;
+      color: var(--accent);
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      font-size: 20px;
+      font-weight: 900;
+      box-shadow: 0 0 20px var(--glow);
+    }
+
+    .brand-name { font-size: 15px; font-weight: 900; letter-spacing: 1px; }
+    .brand-caption { color: var(--muted); font-size: 9px; margin-top: 4px; letter-spacing: 2px; }
+
+    .theme-wrap { position: relative; }
+
+    .theme-button {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      padding: 11px 13px;
+      border-radius: 12px;
+      font-size: 11px;
+      transition: .25s;
+    }
+
+    .theme-button:hover { border-color: var(--accent); transform: translateY(-2px); }
+
+    .theme-menu {
+      display: none;
+      position: absolute;
+      z-index: 20;
+      top: 48px;
+      right: 0;
+      width: 150px;
+      padding: 7px;
+      border: 1px solid var(--border);
+      border-radius: 15px;
+      background: var(--panel);
+      box-shadow: 0 15px 35px #0008;
+    }
+
+    .theme-menu.open { display: block; animation: fadeUp .2s both; }
+
+    .theme-option {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      width: 100%;
+      padding: 10px;
+      border: 0;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--text);
+      text-align: left;
+      font-size: 12px;
+    }
+
+    .theme-option:hover { background: var(--panel2); }
+
+    .swatch {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--swatch);
+      box-shadow: 0 0 9px var(--swatch);
+    }
+
+    /* BIRTHDAY HERO */
+    .birthday {
+      position: relative;
+      isolation: isolate;
+      overflow: hidden;
+      padding: 27px 18px 25px;
+      text-align: center;
+      border: 1px solid var(--border);
+      border-radius: 25px;
+      background: linear-gradient(145deg, var(--panel2), var(--panel));
+      box-shadow: 0 18px 55px #0004, 0 0 35px var(--glow);
+      animation: fadeUp .8s .2s both;
+    }
+
+    .birthday::before {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      width: 220px;
+      height: 220px;
+      top: -145px;
+      left: calc(50% - 110px);
+      border-radius: 50%;
+      background: var(--accent);
+      filter: blur(75px);
+      opacity: .28;
+    }
+
+    .birthday-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      padding: 8px 12px;
+      color: var(--accent);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      background: #0002;
+    }
+
+    .birthday h1 {
+      margin: 22px 0 12px;
+      font-size: clamp(27px, 7vw, 39px);
+      line-height: 1.15;
+      font-weight: 1000;
+      letter-spacing: 1px;
+      background: linear-gradient(90deg, #fff 0%, var(--accent) 48%, #fff 100%);
+      background-size: 200% auto;
+      color: transparent;
+      -webkit-background-clip: text;
+      background-clip: text;
+      animation: shine 3s linear infinite;
+    }
+
+    .birthday p {
+      max-width: 340px;
+      margin: auto;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.8;
+    }
+
+    /* GIFT CARDS */
+    .gift-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 11px;
+      margin: 18px 0 25px;
+      animation: fadeUp .8s .35s both;
+    }
+
+    .gift-card {
+      min-height: 107px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 12px;
+      border: 1px solid var(--border);
+      border-radius: 17px;
+      background: linear-gradient(145deg, var(--panel2), var(--panel));
+      transition: transform .3s, box-shadow .3s;
+    }
+
+    .gift-card:hover {
+      transform: translateY(-7px) rotate(-1deg);
+      box-shadow: 0 12px 28px var(--glow);
+    }
+
+    .gift-mini {
+      position: relative;
+      width: 35px;
+      height: 27px;
+      border-radius: 3px;
+      background: var(--accent2);
+      box-shadow: 0 0 15px var(--glow);
+      animation: giftBounce 2s ease-in-out infinite;
+    }
+
+    .gift-mini::before {
+      content: "";
+      position: absolute;
+      left: 13px;
+      top: 0;
+      width: 8px;
+      height: 100%;
+      background: var(--accent);
+    }
+
+    .gift-mini::after {
+      content: "";
+      position: absolute;
+      left: -3px;
+      top: -6px;
+      width: 35px;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--accent);
+    }
+
+    .gift-card:nth-child(2) .gift-mini { animation-delay: .25s; }
+    .gift-card:nth-child(3) .gift-mini { animation-delay: .5s; }
+
+    .gift-card span {
+      font-size: 9px;
+      color: var(--muted);
+      letter-spacing: 1.5px;
+    }
+
+    /* PAIRING PANEL */
+    .pair-panel {
+      padding: 23px 20px;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background: linear-gradient(155deg, var(--panel), #0b0812);
+      box-shadow: 0 18px 50px #0004;
+      animation: fadeUp .8s .45s both;
+    }
+
+    .panel-heading {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 9px;
+    }
+
+    .heading-icon {
+      width: 42px;
+      height: 42px;
+      flex-shrink: 0;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--border);
+      border-radius: 13px;
+      background: var(--panel2);
+      color: var(--accent);
+      font-size: 20px;
+    }
+
+    .panel-heading h2 { font-size: 16px; font-weight: 850; }
+    .panel-heading p { margin-top: 5px; color: var(--muted); font-size: 11px; }
+
+    .field-label {
+      display: block;
+      margin: 22px 0 9px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1.8px;
+    }
+
+    .phone-field {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 5px 13px;
+      border: 1px solid var(--border);
+      border-radius: 13px;
+      background: #08060d;
+      transition: border-color .25s, box-shadow .25s;
+    }
+
+    .phone-field:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--glow);
+    }
+
+    .phone-prefix { color: var(--accent); font-size: 12px; font-weight: 800; }
+
+    .phone-field input {
+      width: 100%;
+      min-width: 0;
+      padding: 14px 0;
+      outline: none;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .phone-field input::placeholder { color: #655a71; }
+
+    .hint {
+      margin-top: 9px;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.7;
+    }
+
+    .generate-btn {
+      position: relative;
+      width: 100%;
+      margin-top: 19px;
+      padding: 15px;
+      overflow: hidden;
+      border: 0;
+      border-radius: 13px;
+      background: linear-gradient(100deg, var(--accent2), var(--accent));
+      color: #fff;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 1.6px;
+      box-shadow: 0 7px 24px var(--glow);
+      transition: transform .25s, filter .25s;
+    }
+
+    .generate-btn:hover { transform: translateY(-2px); filter: brightness(1.12); }
+    .generate-btn:disabled { cursor: wait; opacity: .65; transform: none; }
+
+    .btn-loader {
+      display: none;
+      width: 14px;
+      height: 14px;
+      margin-right: 9px;
+      vertical-align: -3px;
+      border: 2px solid #ffffff66;
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+
+    .generate-btn.busy .btn-loader { display: inline-block; }
+
+    .result {
+      display: none;
+      margin-top: 17px;
+      padding: 17px;
+      text-align: center;
+      border: 1px solid var(--border);
+      border-radius: 15px;
+      background: var(--panel2);
+      animation: fadeUp .4s both;
+    }
+
+    .result.show { display: block; }
+
+    .result-label {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 2px;
+    }
+
+    .pair-code {
+      margin: 14px 0;
+      color: var(--accent);
+      font-size: clamp(24px, 7vw, 32px);
+      font-weight: 1000;
+      letter-spacing: 5px;
+      overflow-wrap: anywhere;
+      text-shadow: 0 0 20px var(--glow);
+    }
+
+    .copy-btn {
+      padding: 10px 18px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: transparent;
+      color: var(--text);
+      font-size: 11px;
+      transition: .2s;
+    }
+
+    .copy-btn:hover { background: var(--glow); }
+
+    .message {
+      display: none;
+      margin-top: 13px;
+      padding: 12px;
+      border-radius: 11px;
+      font-size: 11px;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+
+    .message.show { display: block; }
+    .message.error { color: var(--danger); background: #ff728d12; border: 1px solid #ff728d35; }
+    .message.info { color: var(--accent); background: var(--glow); border: 1px solid var(--border); }
+
+    .steps {
+      margin-top: 21px;
+      padding: 17px;
+      border: 1px solid var(--border);
+      border-radius: 15px;
+      background: #ffffff03;
+    }
+
+    .steps h3 {
+      margin-bottom: 13px;
+      font-size: 11px;
+      letter-spacing: 1.4px;
+    }
+
+    .step {
+      display: flex;
+      gap: 11px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.7;
+    }
+
+    .step-number {
+      display: grid;
+      place-items: center;
+      width: 23px;
+      height: 23px;
+      flex-shrink: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--accent);
+      font-size: 10px;
+      font-weight: 900;
+    }
+
+    .footer {
+      padding: 26px 0 0;
+      text-align: center;
+      color: #796a89;
+      font-size: 9px;
+      letter-spacing: 2px;
+      line-height: 2.1;
+    }
+
+    .footer strong { color: var(--accent); }
+
+    @keyframes loadProgress { to { width: 100%; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @keyframes shine {
+      to { background-position: 220% center; }
+    }
+
+    @keyframes symbolFloat {
+      0%, 100% { transform: translateY(0) rotate(-3deg); }
+      50% { transform: translateY(-10px) rotate(3deg); }
+    }
+
+    @keyframes giftBounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-7px); }
+    }
+
+    @keyframes orbPulse {
+      from { transform: scale(.85); opacity: .12; }
+      to { transform: scale(1.15); opacity: .25; }
+    }
+
+    @keyframes introRise {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes textBlink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .45; }
+    }
+
+    @media (max-width: 380px) {
+      .page { width: calc(100% - 22px); }
+      .pair-panel { padding: 18px 14px; }
+      .birthday { padding: 23px 12px; }
+      .theme-button { padding: 10px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Birthday intro loader: minimum 5 seconds -->
+  <div id="intro" aria-label="Loading SILA MD">
+    <div class="intro-orb"></div>
+
+    <div class="intro-content">
+      <div class="intro-symbol">S</div>
+      <div class="intro-title">HAPPY BIRTHDAY</div>
+      <div class="intro-title" style="margin-top:7px">SILA TECH</div>
+      <div class="intro-subtitle">A SPECIAL DAY · A SPECIAL SYSTEM</div>
+
+      <div class="intro-gifts" aria-hidden="true">
+        <div class="gift"><i></i><b></b></div>
+        <div class="gift"><i></i><b></b></div>
+        <div class="gift"><i></i><b></b></div>
+      </div>
+
+      <div class="loader-track">
+        <div class="loader-progress"></div>
+      </div>
+      <div class="loading-label">PREPARING YOUR EXPERIENCE...</div>
+    </div>
+
+    <div class="intro-footer">POWERED BY SILA TECH</div>
+  </div>
+
+  <div class="ambient one"></div>
+  <div class="ambient two"></div>
+
+  <main class="page" id="page">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-icon">S</div>
+        <div>
+          <div class="brand-name">SILA MD MINI</div>
+          <div class="brand-caption">PAIRING SYSTEM</div>
+        </div>
+      </div>
+
+      <div class="theme-wrap">
+        <button class="theme-button" id="themeButton" type="button">
+          ◈ THEME <span aria-hidden="true">⌄</span>
+        </button>
+
+        <div class="theme-menu" id="themeMenu">
+          <button class="theme-option" data-theme="violet">
+            <i class="swatch" style="--swatch:#b45cff"></i> Violet
+          </button>
+          <button class="theme-option" data-theme="rose">
+            <i class="swatch" style="--swatch:#ff78b8"></i> Rose
+          </button>
+          <button class="theme-option" data-theme="emerald">
+            <i class="swatch" style="--swatch:#5ef5bd"></i> Emerald
+          </button>
+          <button class="theme-option" data-theme="gold">
+            <i class="swatch" style="--swatch:#ffd16b"></i> Gold
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <section class="birthday">
+      <div class="birthday-tag">✦ TODAY IS SPECIAL ✦</div>
+      <h1>HAPPY BIRTHDAY<br>SILA TECH</h1>
+      <p>
+        Celebrating innovation, creativity and another year of building
+        something extraordinary. Welcome to the SILA MD MINI experience.
+      </p>
+    </section>
+
+    <section class="gift-row" aria-label="Birthday gifts">
+      <div class="gift-card">
+        <div class="gift-mini"></div>
+        <span>INNOVATION</span>
+      </div>
+      <div class="gift-card">
+        <div class="gift-mini"></div>
+        <span>CREATIVITY</span>
+      </div>
+      <div class="gift-card">
+        <div class="gift-mini"></div>
+        <span>TECHNOLOGY</span>
+      </div>
+    </section>
+
+    <section class="pair-panel">
+      <div class="panel-heading">
+        <div class="heading-icon">⌘</div>
+        <div>
+          <h2>Connect WhatsApp</h2>
+          <p>Generate your account pairing code</p>
+        </div>
+      </div>
+
+      <form id="pairForm">
+        <label class="field-label" for="phone">WHATSAPP PHONE NUMBER</label>
+
+        <div class="phone-field">
+          <span class="phone-prefix">+</span>
+          <input
+            id="phone"
+            name="phone"
+            type="tel"
+            inputmode="numeric"
+            autocomplete="tel"
+            placeholder="2557XXXXXXXX"
+            maxlength="20"
+            required
+          >
+        </div>
+
+        <p class="hint">
+          Enter your country code and phone number without spaces or the plus sign.
+          Example: 2557XXXXXXXX
+        </p>
+
+        <button class="generate-btn" id="generateBtn" type="submit">
+          <span class="btn-loader"></span>
+          <span id="btnText">GENERATE PAIRING CODE</span>
+        </button>
+      </form>
+
+      <div class="message" id="message" role="status" aria-live="polite"></div>
+
+      <div class="result" id="result">
+        <div class="result-label">YOUR PAIRING CODE</div>
+        <div class="pair-code" id="pairCode">--------</div>
+        <button class="copy-btn" id="copyBtn" type="button">COPY CODE</button>
+      </div>
+
+      <div class="steps">
+        <h3>HOW TO CONNECT</h3>
+        <div class="step">
+          <span class="step-number">01</span>
+          <span>Enter the WhatsApp number you want to connect.</span>
+        </div>
+        <div class="step">
+          <span class="step-number">02</span>
+          <span>Press Generate Pairing Code and wait for the response.</span>
+        </div>
+        <div class="step">
+          <span class="step-number">03</span>
+          <span>On your phone, open WhatsApp → Linked Devices → Link a Device → Link with phone number instead.</span>
+        </div>
+        <div class="step">
+          <span class="step-number">04</span>
+          <span>Enter the code shown on this page inside WhatsApp.</span>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <strong>✦ SILA MD MINI✦</strong><br>
+      POWERED BY SILA TECH<br>
+      PAIRING SYSTEM · ALL RIGHTS RESERVED
+    </footer>
+  </main>
+
+  <script>
+    // Show the animated intro for 5 seconds before revealing the page.
+    const intro = document.getElementById("intro");
+    const page = document.getElementById("page");
+
+    window.addEventListener("load", () => {
+      setTimeout(() => {
+        intro.classList.add("hide");
+        page.classList.add("ready");
+      }, 5000);
+    });
+
+    // Theme switcher: four themes.
+    const themeButton = document.getElementById("themeButton");
+    const themeMenu = document.getElementById("themeMenu");
+
+    themeButton.addEventListener("click", () => {
+      themeMenu.classList.toggle("open");
+    });
+
+    document.querySelectorAll(".theme-option").forEach(button => {
+      button.addEventListener("click", () => {
+        const theme = button.dataset.theme;
+        document.documentElement.dataset.theme = theme;
+        themeMenu.classList.remove("open");
+
+        try {
+          localStorage.setItem("sila-md-theme", theme);
+        } catch (_) {}
+      });
+    });
+
+    try {
+      const savedTheme = localStorage.getItem("sila-md-theme");
+      if (["violet", "rose", "emerald", "gold"].includes(savedTheme)) {
+        document.documentElement.dataset.theme = savedTheme;
+      }
+    } catch (_) {}
+
+    document.addEventListener("click", event => {
+      if (!event.target.closest(".theme-wrap")) {
+        themeMenu.classList.remove("open");
+      }
+    });
+
+    // Pairing request.
+    // Backend must implement GET /code?number=255XXXXXXXXX.
+    const pairForm = document.getElementById("pairForm");
+    const phoneInput = document.getElementById("phone");
+    const generateBtn = document.getElementById("generateBtn");
+    const btnText = document.getElementById("btnText");
+    const message = document.getElementById("message");
+    const result = document.getElementById("result");
+    const pairCode = document.getElementById("pairCode");
+    const copyBtn = document.getElementById("copyBtn");
+
+    function showMessage(text, type = "info") {
+      message.textContent = text;
+      message.className = "message show " + type;
+    }
+
+    function extractCode(data) {
+      if (typeof data === "string") return data;
+
+      const candidates = [
+        data?.code,
+        data?.pairingCode,
+        data?.pairing_code,
+        data?.data?.code,
+        data?.data?.pairingCode,
+        data?.result?.code
+      ];
+
+      return candidates.find(value =>
+        typeof value === "string" && value.trim().length > 0
+      ) || "";
+    }
+
+    pairForm.addEventListener("submit", async event => {
+      event.preventDefault();
+
+      const number = phoneInput.value.replace(/\D/g, "");
+
+      if (number.length < 10 || number.length > 15) {
+        showMessage("Enter a valid phone number including the country code.", "error");
+        return;
+      }
+
+      generateBtn.disabled = true;
+      generateBtn.classList.add("busy");
+      btnText.textContent = "GENERATING CODE...";
+      result.classList.remove("show");
+      message.className = "message";
+
+      showMessage("Connecting to the pairing server. Please wait...", "info");
+
+      try {
+        const response = await fetch(
+          "/code?number=" + encodeURIComponent(number),
+          {
+            method: "GET",
+            headers: { "Accept": "application/json" }
+          }
+        );
+
+        const raw = await response.text();
+        let data;
+
+        try {
+          data = JSON.parse(raw);
+        } catch (_) {
+          data = raw;
+        }
+
+        if (!response.ok) {
+          const errorText =
+            typeof data === "object"
+              ? data.message || data.error || "The pairing server returned an error."
+              : "The pairing server returned HTTP " + response.status + ".";
+          throw new Error(errorText);
+        }
+
+        const code = extractCode(data);
+
+        if (!code) {
+          const detail = typeof data === "object"
+            ? data.message || data.error
+            : "";
+
+          throw new Error(
+            detail || "No pairing code was returned. Check the backend response format."
+          );
+        }
+
+        pairCode.textContent = code.trim();
+        result.classList.add("show");
+        message.className = "message";
+      } catch (error) {
+        showMessage(
+          error.message || "Could not connect to the pairing server. Try again.",
+          "error"
+        );
+      } finally {
+        generateBtn.disabled = false;
+        generateBtn.classList.remove("busy");
+        btnText.textContent = "GENERATE PAIRING CODE";
+      }
+    });
+
+    copyBtn.addEventListener("click", async () => {
+      const code = pairCode.textContent.trim();
+
+      try {
+        await navigator.clipboard.writeText(code);
+        copyBtn.textContent = "COPIED SUCCESSFULLY";
+        setTimeout(() => {
+          copyBtn.textContent = "COPY CODE";
+        }, 1800);
+      } catch (_) {
+        showMessage("Copy was blocked. Select the code and copy it manually.", "error");
+      }
+    });
+  </script>
+</body>
+</html>
