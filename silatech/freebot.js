@@ -8,9 +8,11 @@ module.exports = {
       await socket.sendMessage(msg.key.remoteJid, { react: { text: "🤖", key: msg.key }}, { quoted: msg });
       const freebotMsg = `🤖 *CONNECT FREE BOT*\n\n` +
         `To connect SILA MD MINI to your WhatsApp:\n\n` +
-        `1. Visit our website https://min-bot-ewan.onrender.com or\n` +
+        `1. Visit our website https://min-bot-ewan.onrender.com\n` +
         `2. Use the pairing system\n` +
         `3. Get your personal bot instance\n\n` +
+        `*👑 Owner:* Sila Tech\n` +
+        `*📞 Owner No:* 255789661031\n\n` +
         `*Features:*\n` +
         `✅ YouTube Downloader\n` +
         `✅ TikTok Downloader\n` +
@@ -18,7 +20,8 @@ module.exports = {
         `✅ Anime Images\n` +
         `✅ Group Management\n` +
         `✅ Auto-reply System\n\n` +
-        `_Contact admin for more info_`;
+        `📢 *Channel:* ${CHANNEL_URL}\n` +
+        `👥 *Group:* ${GROUP_URL}`;
 
       await reply(freebotMsg);
     } catch (e) {
