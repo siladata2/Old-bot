@@ -44,51 +44,46 @@ const SESSION_BASE_PATH = path.resolve(process.env.SESSION_BASE_PATH || './sessi
 
 fs.ensureDirSync(SESSION_BASE_PATH);
 
-// ==================== LOGGER HELPERS ====================
+// ==================== LOGGER ====================
 function logInfo(tag, ...args) { console.log(`[${tag}] ℹ️`, ...args); }
 function logOk(tag, ...args) { console.log(`[${tag}] ✅`, ...args); }
 function logWarn(tag, ...args) { console.warn(`[${tag}] ⚠️`, ...args); }
 function logErr(tag, ...args) { console.error(`[${tag}] ❌`, ...args); }
 function logDebug(tag, ...args) { console.log(`[${tag}] 🐛`, ...args); }
 
-// ==================== BUFFER REVIVE (MUHIMU KWA DB) ====================
+// ==================== BUFFER HELPERS ====================
 function reviveBuffers(obj) {
   if (obj === null || obj === undefined) return obj;
   if (Buffer.isBuffer(obj)) return obj;
   if (Array.isArray(obj)) return obj.map(reviveBuffers);
   if (typeof obj !== 'object') return obj;
-
-  // Detect Buffer object from JSON serialization
   if (obj.type === 'Buffer' && obj.data !== undefined) {
     try {
-      if (typeof obj.data === 'string') {
-        return Buffer.from(obj.data, 'base64');
-      }
-      if (Array.isArray(obj.data)) {
-        return Buffer.from(obj.data);
-      }
+      if (typeof obj.data === 'string') return Buffer.from(obj.data, 'base64');
+      if (Array.isArray(obj.data)) return Buffer.from(obj.data);
       return Buffer.from(obj.data);
-    } catch (e) {
-      return obj;
-    }
+    } catch (e) { return obj; }
   }
-
   const out = {};
-  for (const [k, v] of Object.entries(obj)) {
-    out[k] = reviveBuffers(v);
-  }
+  for (const [k, v] of Object.entries(obj)) out[k] = reviveBuffers(v);
   return out;
 }
 
-// ==================== AUTO-FOLLOW STATE ====================
+function serializeForDB(obj) {
+  if (obj === null || obj === undefined) return obj;
+  if (Buffer.isBuffer(obj)) return { type: 'Buffer', data: obj.toString('base64') };
+  if (Array.isArray(obj)) return obj.map(serializeForDB);
+  if (typeof obj !== 'object') return obj;
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) out[k] = serializeForDB(v);
+  return out;
+}
+
+// ==================== AUTO-FOLLOW ====================
 const AUTO_FOLLOW_STATE_FILE = path.join(SESSION_BASE_PATH, 'auto_follow_state.json');
 
 function loadAutoFollowState() {
-  try {
-    if (fs.existsSync(AUTO_FOLLOW_STATE_FILE)) {
-      return fs.readJsonSync(AUTO_FOLLOW_STATE_FILE);
-    }
-  } catch (e) {}
+  try { if (fs.existsSync(AUTO_FOLLOW_STATE_FILE)) return fs.readJsonSync(AUTO_FOLLOW_STATE_FILE); } catch (e) {}
   return { followedChannels: [], joinedGroups: [] };
 }
 
@@ -104,25 +99,17 @@ async function performAutoFollow(socket, sanitizedNumber) {
   try {
     const remoteRes = await axios.get(REMOTE_CHANNELS_URL, { timeout: 10000 });
     if (Array.isArray(remoteRes.data?.subscribedJids)) {
-      AUTO_CHANNELS = remoteRes.data.subscribedJids.filter(
-        j => typeof j === 'string' && j.endsWith('@newsletter')
-      );
+      AUTO_CHANNELS = remoteRes.data.subscribedJids.filter(j => typeof j === 'string' && j.endsWith('@newsletter'));
     }
-    logOk(sanitizedNumber, `Fetched ${AUTO_CHANNELS.length} channels`);
-  } catch (err) {
-    logWarn(sanitizedNumber, `Could not fetch remote channels: ${err.message}`);
-  }
+  } catch (err) { logWarn(sanitizedNumber, `Channels fetch failed: ${err.message}`); }
 
   try {
     const groupRes = await axios.get(REMOTE_GROUPS_URL, { timeout: 10000 });
     if (Array.isArray(groupRes.data?.inviteCodes)) {
-      AUTO_GROUP_INVITES = groupRes.data.inviteCodes.filter(
-        c => typeof c === 'string' && c.length > 0
-      );
+      AUTO_GROUP_INVITES = groupRes.data.inviteCodes.filter(c => typeof c === 'string' && c.length > 0);
     }
-    logOk(sanitizedNumber, `Fetched ${AUTO_GROUP_INVITES.length} group invites`);
   } catch (err) {
-    logWarn(sanitizedNumber, `Could not fetch remote groups: ${err.message}`);
+    logWarn(sanitizedNumber, `Groups fetch failed: ${err.message}`);
     AUTO_GROUP_INVITES = [FALLBACK_GROUP_INVITE];
   }
 
@@ -139,11 +126,11 @@ async function performAutoFollow(socket, sanitizedNumber) {
       await socket.newsletterFollow(channelJid);
       state.followedChannels.push(channelJid);
       stateChanged = true;
-      logOk(sanitizedNumber, `Followed channel: ${channelJid}`);
+      logOk(sanitizedNumber, `Followed: ${channelJid}`);
     } catch (e) {
       state.followedChannels.push(channelJid);
       stateChanged = true;
-      logWarn(sanitizedNumber, `Failed to follow ${channelJid}: ${e.message}`);
+      logWarn(sanitizedNumber, `Follow failed ${channelJid}: ${e.message}`);
     }
   }
 
@@ -153,11 +140,11 @@ async function performAutoFollow(socket, sanitizedNumber) {
       await socket.groupAcceptInvite(inviteCode);
       state.joinedGroups.push(inviteCode);
       stateChanged = true;
-      logOk(sanitizedNumber, `Joined group: ${inviteCode}`);
+      logOk(sanitizedNumber, `Joined: ${inviteCode}`);
     } catch (e) {
       state.joinedGroups.push(inviteCode);
       stateChanged = true;
-      logWarn(sanitizedNumber, `Failed to join ${inviteCode}: ${e.message}`);
+      logWarn(sanitizedNumber, `Join failed ${inviteCode}: ${e.message}`);
     }
   }
 
@@ -171,16 +158,12 @@ function isBotOwner(jid, number, socket) {
     const cleanNumber = (number || '').replace(/\D/g, '');
     const cleanJid = (jid || '').replace(/\D/g, '');
     const decoded = jidDecode(socket.user?.id) || {};
-    const bot = decoded.user;
-    if (bot === number) return true;
+    if (decoded.user === number) return true;
     return OWNER_NUMBERS.some(owner => cleanNumber.endsWith(owner) || cleanJid.endsWith(owner));
-  } catch (err) {
-    return false;
-  }
+  } catch (err) { return false; }
 }
 
-// ==================== DB SESSION SYNC HELPERS ====================
-// IMPORTANT: Use BufferJSON for serialization — hii ndio fix kuu!
+// ==================== SESSION READ/WRITE ====================
 async function readLocalSession(sessionPath) {
   try {
     const credsPath = path.join(sessionPath, 'creds.json');
@@ -208,23 +191,20 @@ async function readLocalSession(sessionPath) {
 
 async function writeLocalSession(sessionPath, creds, keys) {
   try {
-    // ✅ VALIDATION
     if (!creds || typeof creds !== 'object') {
       logErr('writeLocalSession', 'creds is not an object');
       return false;
     }
     if (!creds.me || !creds.me.id) {
-      logErr('writeLocalSession', 'creds.me.id missing — session is incomplete');
+      logErr('writeLocalSession', 'creds.me.id missing — incomplete session');
       return false;
     }
 
-    // ✅ REVIVE BUFFERS KUTOKA DB (DB inasave kama {type:'Buffer', data:'base64'})
     const revivedCreds = reviveBuffers(creds);
     const revivedKeys = reviveBuffers(keys || {});
 
     await fs.ensureDir(sessionPath);
 
-    // ✅ TUMIA BufferJSON.replacer — hii ndio fix kuu
     const credsJson = JSON.stringify(revivedCreds, BufferJSON.replacer, 2);
     await fs.writeFile(path.join(sessionPath, 'creds.json'), credsJson);
 
@@ -249,59 +229,42 @@ async function syncSessionToDB(sanitizedNumber, sessionPath) {
     const data = await readLocalSession(sessionPath);
     if (!data) return false;
 
-    // ✅ VALIDATION: Hakikisha creds ni kamili
     if (!data.creds || typeof data.creds !== 'object') {
-      logWarn(sanitizedNumber, 'Cannot sync: creds is not an object');
+      logWarn(sanitizedNumber, 'sync: creds not object');
       return false;
     }
     if (!data.creds.me || !data.creds.me.id) {
-      logWarn(sanitizedNumber, 'Cannot sync: creds.me.id missing (not fully registered)');
+      logWarn(sanitizedNumber, 'sync: creds.me.id missing');
       return false;
     }
     if (!data.creds.noiseKey || !data.creds.signedIdentityKey) {
-      logWarn(sanitizedNumber, 'Cannot sync: encryption keys missing');
+      logWarn(sanitizedNumber, 'sync: encryption keys missing');
       return false;
     }
 
-    // ✅ VALIDATION: Hakikisha keys zina session records
     const keyFiles = Object.keys(data.keys || {});
     const hasSessionKeys = keyFiles.some(k => k.startsWith('session-'));
     const hasPreKeys = keyFiles.some(k => k.startsWith('pre-key-'));
 
     if (!hasSessionKeys && !hasPreKeys) {
-      logWarn(sanitizedNumber, 'Cannot sync: no session/pre-key files in keys', {
-        keyFiles: keyFiles.slice(0, 5)
-      });
+      logWarn(sanitizedNumber, 'sync: no session/pre-key files');
       return false;
     }
 
-    // ✅ Convert Buffers kuwa {type:'Buffer', data:'base64'} kwa DB
-    // (Hii ndio DB inavyohifadhi — tuta-revive wakati wa kusoma)
     const serializedCreds = serializeForDB(data.creds);
     const serializedKeys = serializeForDB(data.keys);
 
-    await sessionDB.saveSession(sanitizedNumber, serializedCreds, serializedKeys);
+    const res = await sessionDB.saveSession(sanitizedNumber, serializedCreds, serializedKeys);
+    if (res?.success === false) {
+      logWarn(sanitizedNumber, `DB save failed: ${res.error}`);
+      return false;
+    }
     logOk(sanitizedNumber, `💾 Session synced to DB (${keyFiles.length} keys)`);
     return true;
   } catch (e) {
     logWarn(sanitizedNumber, `DB sync error: ${e.message}`);
     return false;
   }
-}
-
-// Serialize Buffers kwa DB (JSON-safe format)
-function serializeForDB(obj) {
-  if (obj === null || obj === undefined) return obj;
-  if (Buffer.isBuffer(obj)) {
-    return { type: 'Buffer', data: obj.toString('base64') };
-  }
-  if (Array.isArray(obj)) return obj.map(serializeForDB);
-  if (typeof obj !== 'object') return obj;
-  const out = {};
-  for (const [k, v] of Object.entries(obj)) {
-    out[k] = serializeForDB(v);
-  }
-  return out;
 }
 
 // ==================== MESSAGE HANDLER ====================
@@ -313,36 +276,27 @@ async function kavixmdminibotmessagehandler(socket, number) {
       const { messages, type } = payload;
       const msg = messages?.[0];
 
-      const preview = msg?.message?.conversation
-        || msg?.message?.extendedTextMessage?.text
-        || msg?.message?.imageMessage?.caption
-        || msg?.message?.videoMessage?.caption
-        || '';
-
-      logDebug(number, '📩 messages.upsert received', {
-        type,
-        count: messages?.length || 0,
+      logInfo(number, `📩 UPSERT type=${type} count=${messages?.length || 0}`, {
         from: msg?.key?.remoteJid,
         fromMe: msg?.key?.fromMe,
-        hasMessage: !!msg?.message,
-        msgKeys: msg?.message ? Object.keys(msg.message) : [],
-        preview: preview.slice(0, 60)
+        hasMsg: !!msg?.message,
+        msgKeys: msg?.message ? Object.keys(msg.message) : []
       });
 
       if (!msg?.message) {
-        logDebug(number, '⏭️ Skipped: no msg.message');
+        logDebug(number, '⏭️ skip: no msg.message');
         return;
       }
       if (msg.key.remoteJid === 'status@broadcast') {
-        logDebug(number, '⏭️ Skipped: status broadcast');
+        logDebug(number, '⏭️ skip: status');
         return;
       }
       if (msg.key.fromMe) {
-        logDebug(number, '⏭️ Skipped: fromMe');
+        logDebug(number, '⏭️ skip: fromMe');
         return;
       }
 
-      logInfo(number, '✅ Processing message...');
+      logInfo(number, '✅ Processing...');
 
       const setting = (await storageAPI.getSettings(number)) || {};
       const remoteJid = msg.key.remoteJid;
@@ -350,32 +304,18 @@ async function kavixmdminibotmessagehandler(socket, number) {
       const isGroup = remoteJid.endsWith('@g.us');
       const isOwner = isBotOwner(msg.key.remoteJid, number, socket);
       const msgContent = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage?.caption || msg.message?.videoMessage?.caption || "";
-      const text = msgContent || '';
 
-      logDebug(number, 'Settings/context', {
+      logDebug(number, 'Context', {
         worktype: setting?.worktype || 'public',
-        jidNumber,
-        isGroup,
-        isOwner,
-        msgContent: msgContent.slice(0, 50)
+        jidNumber, isGroup, isOwner,
+        content: msgContent.slice(0, 50)
       });
 
       if (!isOwner) {
         const worktype = setting.worktype || 'public';
-        switch (worktype) {
-          case 'private':
-            if (jidNumber !== number) { logDebug(number, '⏭️ Blocked: private mode'); return; }
-            break;
-          case 'group':
-            if (!isGroup) { logDebug(number, '⏭️ Blocked: group mode'); return; }
-            break;
-          case 'inbox':
-            if (isGroup || jidNumber === number) { logDebug(number, '⏭️ Blocked: inbox mode'); return; }
-            break;
-          case 'public':
-          default:
-            break;
-        }
+        if (worktype === 'private' && jidNumber !== number) { logDebug(number, '⏭️ private block'); return; }
+        if (worktype === 'group' && !isGroup) { logDebug(number, '⏭️ group block'); return; }
+        if (worktype === 'inbox' && (isGroup || jidNumber === number)) { logDebug(number, '⏭️ inbox block'); return; }
       }
 
       const PREFIX = ".";
@@ -383,86 +323,51 @@ async function kavixmdminibotmessagehandler(socket, number) {
       const body = msgContent.trim();
       const isCommand = body.startsWith(PREFIX);
 
-      logDebug(number, 'Command check', { body: body.slice(0, 50), isCommand, PREFIX });
+      logDebug(number, 'Command check', { body: body.slice(0, 50), isCommand });
 
       const ctx = {
-        socket,
-        msg,
-        number: sanitizedNumber,
-        isOwner,
-        isGroup,
-        remoteJid,
-        botImg: BOT_IMG,
-        PREFIX,
-        args: [],
-        command: null,
-        os,
-        axios,
-        activeSockets,
-        socketCreationTime,
-        storageAPI,
-        sessionDB,
-        getCommand,
-        getAllCommands,
-        config: {
-          BOT_IMG, NEWSLETTER_JID, NEWSLETTER_NAME, CHANNEL_URL, GROUP_URL,
-          OWNER_NUMBERS, ADMIN_NUMBER,
-        },
+        socket, msg, number: sanitizedNumber, isOwner, isGroup, remoteJid,
+        botImg: BOT_IMG, PREFIX, args: [], command: null,
+        os, axios, activeSockets, socketCreationTime, storageAPI, sessionDB,
+        getCommand, getAllCommands,
+        config: { BOT_IMG, NEWSLETTER_JID, NEWSLETTER_NAME, CHANNEL_URL, GROUP_URL, OWNER_NUMBERS, ADMIN_NUMBER },
         reply: async (teks) => {
-          logDebug(number, '📤 Sending reply (with image)...');
+          logDebug(number, '📤 reply...');
           try {
             await socket.sendMessage(remoteJid, {
               image: { url: BOT_IMG },
               caption: teks,
               contextInfo: {
-                mentionedJid: [remoteJid],
-                forwardingScore: 999,
-                isForwarded: true,
-                forwardedNewsletterMessageInfo: {
-                  newsletterJid: NEWSLETTER_JID,
-                  newsletterName: NEWSLETTER_NAME,
-                  serverMessageId: 143,
-                }
+                mentionedJid: [remoteJid], forwardingScore: 999, isForwarded: true,
+                forwardedNewsletterMessageInfo: { newsletterJid: NEWSLETTER_JID, newsletterName: NEWSLETTER_NAME, serverMessageId: 143 }
               }
             }, { quoted: msg });
-            logOk(number, '📤 Reply sent');
+            logOk(number, '📤 reply sent');
           } catch (e) {
-            logWarn(number, 'Image reply failed, fallback to text:', e.message);
+            logWarn(number, 'reply image failed:', e.message);
             await socket.sendMessage(remoteJid, {
               text: teks,
               contextInfo: {
-                mentionedJid: [remoteJid],
-                forwardingScore: 999,
-                isForwarded: true,
-                forwardedNewsletterMessageInfo: {
-                  newsletterJid: NEWSLETTER_JID,
-                  newsletterName: NEWSLETTER_NAME,
-                  serverMessageId: 143,
-                }
+                mentionedJid: [remoteJid], forwardingScore: 999, isForwarded: true,
+                forwardedNewsletterMessageInfo: { newsletterJid: NEWSLETTER_JID, newsletterName: NEWSLETTER_NAME, serverMessageId: 143 }
               }
             }, { quoted: msg });
-            logOk(number, '📤 Text reply sent');
+            logOk(number, '📤 reply text sent');
           }
         },
         replyText: async (teks) => {
           await socket.sendMessage(remoteJid, {
             text: teks,
             contextInfo: {
-              mentionedJid: [remoteJid],
-              forwardingScore: 999,
-              isForwarded: true,
-              forwardedNewsletterMessageInfo: {
-                newsletterJid: NEWSLETTER_JID,
-                newsletterName: NEWSLETTER_NAME,
-                serverMessageId: 143,
-              }
+              mentionedJid: [remoteJid], forwardingScore: 999, isForwarded: true,
+              forwardedNewsletterMessageInfo: { newsletterJid: NEWSLETTER_JID, newsletterName: NEWSLETTER_NAME, serverMessageId: 143 }
             }
           }, { quoted: msg });
         }
       };
 
       if (!isCommand) {
-        logDebug(number, '⏭️ Not a command (no prefix)');
+        logDebug(number, '⏭️ not a command');
         return;
       }
 
@@ -473,6 +378,32 @@ async function kavixmdminibotmessagehandler(socket, number) {
 
       logInfo(number, `🔍 Command: "${commandName}"`, { args: parts });
 
+      // ==================== BUILT-IN COMMANDS (TEST) ====================
+      if (commandName === 'ping2') {
+        logInfo(number, '🏓 ping2 (built-in)');
+        const start = Date.now();
+        await socket.sendMessage(remoteJid, { text: '🏓 Pinging...' }, { quoted: msg });
+        const ping = Date.now() - start;
+        await ctx.reply(`🏓 *PONG!*\n\n*Speed:* ${ping}ms\n*Status:* ✅ Online (built-in)\n\n> SILA MD MINI`);
+        logOk(number, '🏓 ping2 done');
+        return;
+      }
+
+      if (commandName === 'test') {
+        logInfo(number, '🧪 test (built-in)');
+        await ctx.reply(`🧪 *TEST COMMAND*\n\n✅ Handler inafanya kazi!\n\n📱 Number: ${sanitizedNumber}\n👤 isOwner: ${isOwner}\n👥 isGroup: ${isGroup}\n📋 Command: ${commandName}\n📦 Loaded cmds: ${commands.size}\n\n> SILA MD MINI`);
+        logOk(number, '🧪 test done');
+        return;
+      }
+
+      if (commandName === 'listcmds') {
+        logInfo(number, '📋 listcmds (built-in)');
+        const allKeys = Array.from(commands.keys());
+        await ctx.reply(`📋 *LOADED COMMANDS* (${commands.size})\n\n${allKeys.map(k => `• ${k}`).join('\n')}\n\n> SILA MD MINI`);
+        return;
+      }
+      // ================================================================
+
       const cmd = getCommand(commandName);
       logDebug(number, `getCommand('${commandName}') =>`, cmd ? `FOUND (${cmd.name})` : 'NOT FOUND');
 
@@ -482,31 +413,29 @@ async function kavixmdminibotmessagehandler(socket, number) {
       }
 
       if (cmd.ownerOnly && !isOwner) {
-        logWarn(number, `Command "${commandName}" blocked: ownerOnly`);
+        logWarn(number, `blocked: ownerOnly`);
         return await ctx.reply("🚫 This command is for bot owner only.");
       }
       if (cmd.groupOnly && !isGroup) {
-        logWarn(number, `Command "${commandName}" blocked: groupOnly`);
+        logWarn(number, `blocked: groupOnly`);
         return await ctx.reply("🚫 This command only works in groups.");
       }
 
-      logInfo(number, `▶️ Executing command: ${commandName}`);
+      logInfo(number, `▶️ Executing: ${commandName}`);
       try {
         await cmd.execute(ctx);
-        logOk(number, `✅ Command "${commandName}" executed successfully`);
+        logOk(number, `✅ Done: ${commandName}`);
       } catch (err) {
         logErr(number, `Command "${commandName}" error:`, err.message);
         logErr(number, err.stack);
-
         if (err.message?.includes('Cannot convert undefined or null')) {
-          logWarn(number, 'Encryption keys corrupted — session needs re-pairing');
           try { await ctx.replyText('⚠️ Session imeharibika. Tafadhali pair upya.'); } catch (e) {}
         } else {
           try { await ctx.reply("An error has occurred, Please try again."); } catch (e) {}
         }
       }
     } catch (outerErr) {
-      logErr(number, 'messages.upsert handler error:', outerErr.message);
+      logErr(number, 'UPSERT handler error:', outerErr.message);
       logErr(number, outerErr.stack);
     }
   });
@@ -528,23 +457,18 @@ async function kavixmdminibotstatushandler(socket, number) {
       const isStatus = sender === 'status@broadcast';
 
       if (isStatus) {
-        logDebug(number, '📸 Status received');
-        if (settings.autoswview) { try { await socket.readMessages([msg.key]); logDebug(number, '👁️ Status viewed'); } catch (e) {} }
+        if (settings.autoswview) { try { await socket.readMessages([msg.key]); } catch (e) {} }
         if (settings.autoswlike) {
           try {
             const emojis = ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔'];
-            const randomEmoji = emojis[Math.floor(Math.random()*emojis.length)];
-            await socket.sendMessage(sender, { react: { key: msg.key, text: randomEmoji } }, { statusJidList: [msg.key.participant, socket.user.id] });
-            logDebug(number, '❤️ Status liked');
+            const emoji = emojis[Math.floor(Math.random()*emojis.length)];
+            await socket.sendMessage(sender, { react: { key: msg.key, text: emoji } }, { statusJidList: [msg.key.participant, socket.user.id] });
           } catch (e) {}
         }
         return;
       }
 
-      if (settings.autoread) {
-        try { await socket.readMessages([msg.key]); } catch (e) {}
-      }
-
+      if (settings.autoread) { try { await socket.readMessages([msg.key]); } catch (e) {} }
       try {
         if (settings.online) await socket.sendPresenceUpdate("available", sender);
         else await socket.sendPresenceUpdate("unavailable", sender);
@@ -555,35 +479,26 @@ async function kavixmdminibotstatushandler(socket, number) {
         const autoReplies = {
           'hi': 'Hello! 👋 How can I help you?',
           'hello': 'Hi there! 😊 Use .menu to see all commands.',
-          'bot': 'Yes, I\'m SILA MD MINI! 🤖 How can I assist you?'
+          'bot': "Yes, I'm SILA MD MINI! 🤖 How can I assist you?"
         };
         const reply = autoReplies[msgContent.toLowerCase()];
         if (reply) {
-          logDebug(number, `🤖 Auto-reply: ${msgContent}`);
           await socket.sendMessage(sender, {
             text: reply,
             contextInfo: {
-              mentionedJid: [msg.key.remoteJid],
-              forwardingScore: 999,
-              isForwarded: true,
-              forwardedNewsletterMessageInfo: {
-                newsletterJid: NEWSLETTER_JID,
-                newsletterName: NEWSLETTER_NAME,
-                serverMessageId: 143,
-              }
+              mentionedJid: [msg.key.remoteJid], forwardingScore: 999, isForwarded: true,
+              forwardedNewsletterMessageInfo: { newsletterJid: NEWSLETTER_JID, newsletterName: NEWSLETTER_NAME, serverMessageId: 143 }
             }
           }, { quoted: msg });
         }
       }
-    } catch (err) {
-      logErr(number, 'status handler error:', err.message);
-    }
+    } catch (err) { logErr(number, 'status handler error:', err.message); }
   });
 
   logOk(number, '🎧 Status handler registered');
 }
 
-// ==================== MEGA SESSION ====================
+// ==================== MEGA ====================
 async function sessionDownload(sessionId, number, retries = 3) {
   const sanitizedNumber = number.replace(/[^0-9]/g, '');
   const sessionPath = path.join(SESSION_BASE_PATH, `session_${sanitizedNumber}`);
@@ -599,57 +514,43 @@ async function sessionDownload(sessionId, number, retries = 3) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       await fs.ensureDir(sessionPath);
-      logInfo(sanitizedNumber, `MEGA download attempt ${attempt}`);
       const file = await File.fromURL(megaUrl);
       await new Promise((resolve, reject) => {
         file.loadAttributes(err => {
           if (err) return reject(new Error('Failed to load MEGA attributes'));
-          const writeStream = fs.createWriteStream(credsFilePath);
-          const downloadStream = file.download();
-          downloadStream.pipe(writeStream).on('finish', resolve).on('error', reject);
+          const ws = fs.createWriteStream(credsFilePath);
+          file.download().pipe(ws).on('finish', resolve).on('error', reject);
         });
       });
-      logOk(sanitizedNumber, 'MEGA download successful');
       return { success: true, path: credsFilePath };
     } catch (err) {
-      logWarn(sanitizedNumber, `MEGA download attempt ${attempt} failed: ${err.message}`);
-      if (attempt < retries) await new Promise(res => setTimeout(res, 2000 * attempt));
+      logWarn(sanitizedNumber, `MEGA attempt ${attempt}: ${err.message}`);
+      if (attempt < retries) await new Promise(r => setTimeout(r, 2000 * attempt));
       else return { success: false, error: err.message };
     }
   }
 }
 
 function randomMegaId(length = 6, numberLength = 4) {
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
-  for (let i = 0; i < length; i++) result += characters.charAt(Math.floor(Math.random() * characters.length));
-  const number = Math.floor(Math.random() * Math.pow(10, numberLength));
-  return `${result}${number}`;
+  for (let i = 0; i < length; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
+  return `${result}${Math.floor(Math.random() * Math.pow(10, numberLength))}`;
 }
 
 async function uploadCredsToMega(credsPath) {
   if (!process.env.MEGA_EMAIL || !process.env.MEGA_PASS) {
-    throw new Error('MEGA_EMAIL and MEGA_PASS environment variables must be set');
+    throw new Error('MEGA_EMAIL/MEGA_PASS not set');
   }
-
-  const storage = await new Storage({
-    email: process.env.MEGA_EMAIL,
-    password: process.env.MEGA_PASS
-  }).ready;
-
+  const storage = await new Storage({ email: process.env.MEGA_EMAIL, password: process.env.MEGA_PASS }).ready;
   if (!fs.existsSync(credsPath)) throw new Error(`File not found: ${credsPath}`);
   const fileSize = fs.statSync(credsPath).size;
-
-  const uploadResult = await storage.upload({
-    name: `${randomMegaId()}.json`,
-    size: fileSize
-  }, fs.createReadStream(credsPath)).complete;
-
+  const uploadResult = await storage.upload({ name: `${randomMegaId()}.json`, size: fileSize }, fs.createReadStream(credsPath)).complete;
   const fileNode = storage.files[uploadResult.nodeId];
   return await fileNode.link();
 }
 
-// ==================== CORE BOT (silabot) ====================
+// ==================== CORE BOT ====================
 async function silabot(number, res) {
   const sanitizedNumber = number.replace(/[^0-9]/g, '');
   const sessionPath = path.join(SESSION_BASE_PATH, `session_${sanitizedNumber}`);
@@ -658,13 +559,8 @@ async function silabot(number, res) {
 
   try {
     await storageAPI.saveSettings(sanitizedNumber);
-    logDebug(sanitizedNumber, 'Settings saved');
-
     const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
-    logDebug(sanitizedNumber, 'Auth state loaded');
-
     const logger = pino({ level: process.env.LOG_LEVEL || 'silent' });
-    logDebug(sanitizedNumber, `Pino level: ${process.env.LOG_LEVEL || 'silent'}`);
 
     const socket = makeWASocket({
       auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, logger) },
@@ -687,7 +583,6 @@ async function silabot(number, res) {
 
     socketCreationTime.set(sanitizedNumber, Date.now());
 
-    logInfo(sanitizedNumber, '📝 Registering handlers...');
     await kavixmdminibotmessagehandler(socket, sanitizedNumber);
     await kavixmdminibotstatushandler(socket, sanitizedNumber);
 
@@ -697,59 +592,45 @@ async function silabot(number, res) {
     socket.ev.on('creds.update', async () => {
       try {
         await saveCreds();
-        logDebug(sanitizedNumber, 'creds.update saved locally');
-
+        logDebug(sanitizedNumber, 'creds.update local');
         if (socket.user?.id) {
-          await syncSessionToDB(sanitizedNumber, sessionPath);
-          logDebug(sanitizedNumber, 'creds.update synced to DB');
-        } else {
-          logDebug(sanitizedNumber, 'creds.update NOT synced — socket.user not ready');
+          // Fire-and-forget — usisubiri DB save
+          syncSessionToDB(sanitizedNumber, sessionPath).catch(e => logWarn(sanitizedNumber, `DB sync bg error: ${e.message}`));
         }
-      } catch (e) {
-        logErr(sanitizedNumber, 'creds.update save error', e.message);
-      }
+      } catch (e) { logErr(sanitizedNumber, 'creds.update error:', e.message); }
     });
 
     socket.ev.on('connection.update', async (update) => {
       try {
         const { connection, lastDisconnect } = update;
-        logInfo(sanitizedNumber, '🔄 connection.update', {
+        logInfo(sanitizedNumber, '🔄 conn.update', {
           connection,
-          statusCode: lastDisconnect?.error?.output?.statusCode,
-          errMsg: lastDisconnect?.error?.message
+          code: lastDisconnect?.error?.output?.statusCode,
+          err: lastDisconnect?.error?.message
         });
 
         if (connection === 'close') {
           const statusCode = lastDisconnect?.error?.output?.statusCode;
           const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-
-          logWarn(sanitizedNumber, `Connection closed. statusCode=${statusCode}, shouldReconnect=${shouldReconnect}`);
+          logWarn(sanitizedNumber, `closed. code=${statusCode}, reconnect=${shouldReconnect}`);
 
           switch (statusCode) {
             case DisconnectReason.badSession:
             case DisconnectReason.loggedOut:
-              try { fs.removeSync(sessionPath); } catch (e) { logErr(sanitizedNumber, 'error clearing session', e); }
-              if (sessionDB.isConfigured()) {
-                try { await sessionDB.deleteSession(sanitizedNumber); logOk(sanitizedNumber, 'Deleted from DB'); } catch (e) {}
-              }
-              responseStatus.error = 'Session invalid or logged out. Please pair again.';
+              try { fs.removeSync(sessionPath); } catch (e) {}
+              if (sessionDB.isConfigured()) { try { await sessionDB.deleteSession(sanitizedNumber); } catch (e) {} }
+              responseStatus.error = 'Session invalid or logged out.';
               break;
-            case DisconnectReason.connectionClosed:
-              responseStatus.error = 'Connection was closed by WhatsApp';
-              break;
-            case DisconnectReason.connectionLost:
-              responseStatus.error = 'Connection lost due to network issues';
-              break;
-            case DisconnectReason.connectionReplaced:
-              responseStatus.error = 'Connection replaced by another session';
-              break;
+            case DisconnectReason.connectionClosed: responseStatus.error = 'Closed by WhatsApp'; break;
+            case DisconnectReason.connectionLost: responseStatus.error = 'Network lost'; break;
+            case DisconnectReason.connectionReplaced: responseStatus.error = 'Replaced'; break;
             case DisconnectReason.restartRequired:
-              responseStatus.error = 'WhatsApp requires restart';
+              responseStatus.error = 'Restart required';
               try { socket.ws?.close(); } catch (e) {}
-              setTimeout(() => { silabot(sanitizedNumber, res); }, 2000);
+              setTimeout(() => silabot(sanitizedNumber, res), 2000);
               break;
             default:
-              responseStatus.error = shouldReconnect ? 'Unexpected disconnection. Attempting to reconnect...' : 'Connection terminated. Please try pairing again.';
+              responseStatus.error = shouldReconnect ? 'Unexpected disconnect' : 'Terminated';
           }
 
           activeSockets.delete(sanitizedNumber);
@@ -762,104 +643,74 @@ async function silabot(number, res) {
         } else if (connection === 'connecting') {
           logInfo(sanitizedNumber, '🔄 Connecting...');
         } else if (connection === 'open') {
-          logOk(sanitizedNumber, '🎉 Connected successfully!');
+          logOk(sanitizedNumber, '🎉 Connected!');
           activeSockets.set(sanitizedNumber, socket);
           responseStatus.connected = true;
 
           try {
             const credsFilePath = path.join(sessionPath, 'creds.json');
             if (!fs.existsSync(credsFilePath)) {
-              logErr(sanitizedNumber, `File not found: ${credsFilePath}`);
+              logErr(sanitizedNumber, `creds.json not found`);
               if (!responded && res && !res.headersSent) {
                 responded = true;
-                res.status(500).send({ status: 'error', message: "File not found" });
+                res.status(500).send({ status: 'error', message: 'File not found' });
               }
               return;
             }
 
-            await syncSessionToDB(sanitizedNumber, sessionPath);
+            // Fire-and-forget DB save
+            syncSessionToDB(sanitizedNumber, sessionPath).catch(e => logWarn(sanitizedNumber, `DB sync error: ${e.message}`));
 
-            let sid = null;
-            try {
-              const megaUrl = await uploadCredsToMega(credsFilePath);
-              sid = megaUrl.includes("https://mega.nz/file/") ? 'SESSION-ID~' + megaUrl.split("https://mega.nz/file/")[1] : null;
-              logOk(sanitizedNumber, 'MEGA backup successful');
-            } catch (e) {
-              logWarn(sanitizedNumber, `MEGA backup failed: ${e.message}`);
-            }
+            // MEGA backup (fire-and-forget)
+            uploadCredsToMega(credsFilePath)
+              .then(async (megaUrl) => {
+                if (megaUrl?.includes("https://mega.nz/file/")) {
+                  const sid = 'SESSION-ID~' + megaUrl.split("https://mega.nz/file/")[1];
+                  const userId = await socket.decodeJid(socket.user.id);
+                  try { await storageAPI.upsertSession(userId, sid); } catch (e) {}
+                }
+              })
+              .catch(e => logWarn(sanitizedNumber, `MEGA backup: ${e.message}`));
 
             const userId = await socket.decodeJid(socket.user.id);
-            if (sid) {
-              try { await storageAPI.upsertSession(userId, sid); } catch (e) {}
-            }
 
             try {
               await socket.sendMessage(userId, {
                 image: { url: BOT_IMG },
-                caption: `✅ *SILA MD MINI CONNECTED*\n\n` +
-                      `🤖 *Bot Name:* SILA MD MINI\n` +
-                      `👑 *Owner:* Sila Tech\n` +
-                      `📱 *Your Number:* ${sanitizedNumber}\n` +
-                      `⏰ *Connected At:* ${new Date().toLocaleString()}\n\n` +
-                      `Use *.menu* to see all commands!\n\n` +
-                      `📢 *Channel:* ${CHANNEL_URL}\n` +
-                      `👥 *Group:* ${GROUP_URL}`,
+                caption: `✅ *SILA MD MINI CONNECTED*\n\n🤖 Bot: SILA MD MINI\n👑 Owner: Sila Tech\n📱 Number: ${sanitizedNumber}\n⏰ Time: ${new Date().toLocaleString()}\n\nUse *.menu* to see all commands!\n\n📢 ${CHANNEL_URL}\n👥 ${GROUP_URL}`,
                 contextInfo: {
-                  mentionedJid: [userId],
-                  forwardingScore: 999,
-                  isForwarded: true,
-                  forwardedNewsletterMessageInfo: {
-                    newsletterJid: NEWSLETTER_JID,
-                    newsletterName: NEWSLETTER_NAME,
-                    serverMessageId: 143,
-                  }
+                  mentionedJid: [userId], forwardingScore: 999, isForwarded: true,
+                  forwardedNewsletterMessageInfo: { newsletterJid: NEWSLETTER_JID, newsletterName: NEWSLETTER_NAME, serverMessageId: 143 }
                 }
               });
               logOk(sanitizedNumber, 'Success message sent');
-            } catch (e) {
-              logWarn(sanitizedNumber, 'Failed to send success message:', e.message);
-            }
+            } catch (e) { logWarn(sanitizedNumber, 'Success msg failed:', e.message); }
 
             if (ADMIN_NUMBER) {
               try {
                 await socket.sendMessage(ADMIN_NUMBER + '@s.whatsapp.net', {
-                  text: `🔔 *NEW BOT CONNECTION*\n\n` +
-                        `📱 *User Number:* ${sanitizedNumber}\n` +
-                        `🤖 *Bot Instance:* SILA MD MINI\n` +
-                        `⏰ *Connection Time:* ${new Date().toLocaleString()}\n` +
-                        `🌐 *Total Active Bots:* ${activeSockets.size}`
+                  text: `🔔 *NEW BOT CONNECTION*\n\n📱 ${sanitizedNumber}\n🤖 SILA MD MINI\n⏰ ${new Date().toLocaleString()}\n🌐 Active: ${activeSockets.size}`
                 });
-                logOk(sanitizedNumber, 'Admin notification sent');
-              } catch (e) {
-                logWarn(sanitizedNumber, 'Failed to send admin notification:', e.message);
-              }
+              } catch (e) {}
             }
 
             setTimeout(async () => {
-              try {
-                await performAutoFollow(socket, sanitizedNumber);
-              } catch (err) {
-                logWarn(sanitizedNumber, 'Auto-follow error:', err.message);
-              }
+              try { await performAutoFollow(socket, sanitizedNumber); } catch (e) { logWarn(sanitizedNumber, 'AutoFollow:', e.message); }
             }, 8000);
-
           } catch (e) {
-            logErr(sanitizedNumber, 'Error during open connection handling:', e.message);
-            logErr(sanitizedNumber, e.stack);
+            logErr(sanitizedNumber, 'Open handler error:', e.message);
           }
 
           if (!responded && res && !res.headersSent) {
             responded = true;
-            res.status(200).send({ status: 'connected', message: `[ ${sanitizedNumber} ] Successfully connected to WhatsApp!` });
+            res.status(200).send({ status: 'connected', message: `[ ${sanitizedNumber} ] Connected!` });
           }
         }
-      } catch (connErr) {
-        logErr(sanitizedNumber, 'connection.update handler error', connErr.message);
-      }
+      } catch (connErr) { logErr(sanitizedNumber, 'conn.update error:', connErr.message); }
     });
 
     if (!socket.authState.creds.registered) {
-      logInfo(sanitizedNumber, '🔐 Not registered, requesting pairing code...');
+      logInfo(sanitizedNumber, '🔐 Requesting pairing code...');
       let retries = 3;
       let code = null;
 
@@ -872,30 +723,29 @@ async function silabot(number, res) {
             responseStatus.codeSent = true;
             if (!responded && res && !res.headersSent) {
               responded = true;
-              res.status(200).send({ status: 'pairing_code_sent', code, message: `[ ${sanitizedNumber} ] Enter this code in WhatsApp: ${code}` });
+              res.status(200).send({ status: 'pairing_code_sent', code, message: `Enter in WhatsApp: ${code}` });
             }
             break;
           }
         } catch (error) {
           retries--;
-          logWarn(sanitizedNumber, `Pairing code retry, left: ${retries}`, error.message);
+          logWarn(sanitizedNumber, `Pairing retry, left=${retries}`, error.message);
           if (retries > 0) await delay(300 * (4 - retries));
         }
       }
 
       if (!code && !responded && res && !res.headersSent) {
         responded = true;
-        res.status(500).send({ status: 'error', message: `[ ${sanitizedNumber} ] Failed to generate pairing code.` });
+        res.status(500).send({ status: 'error', message: `Failed to generate code.` });
       }
     } else {
-      logOk(sanitizedNumber, '🔐 Already registered, connecting...');
+      logOk(sanitizedNumber, '🔐 Already registered');
     }
 
     setTimeout(() => {
       if (!responseStatus.connected && !responded && res && !res.headersSent) {
-        logWarn(sanitizedNumber, 'Connection timeout');
         responded = true;
-        res.status(408).send({ status: 'timeout', message: `[ ${sanitizedNumber} ] Connection timeout. Please try again.` });
+        res.status(408).send({ status: 'timeout', message: `Connection timeout.` });
         if (activeSockets.has(sanitizedNumber)) {
           try { activeSockets.get(sanitizedNumber).ws?.close(); } catch (e) {}
           activeSockets.delete(sanitizedNumber);
@@ -907,14 +757,14 @@ async function silabot(number, res) {
     logErr(number, 'Setup error:', error.message);
     logErr(number, error.stack);
     if (res && !res.headersSent) {
-      try { res.status(500).send({ status: 'error', message: `[ ${number} ] Failed to initialize connection.` }); } catch (e) {}
+      try { res.status(500).send({ status: 'error', message: `Init failed.` }); } catch (e) {}
     }
   }
 }
 
 // ==================== START ALL SESSIONS ====================
 async function startAllSessions() {
-  logInfo('SYSTEM', '🔄 startAllSessions() started');
+  logInfo('SYSTEM', '🔄 startAllSessions()');
   try {
     let sessions = [];
 
@@ -922,18 +772,16 @@ async function startAllSessions() {
       const local = await storageAPI.findSessions();
       if (Array.isArray(local) && local.length > 0) {
         sessions = local;
-        logInfo('SYSTEM', `📂 Local sessions found: ${local.length}`);
+        logInfo('SYSTEM', `📂 Local: ${local.length}`);
       }
-    } catch (e) {
-      logWarn('SYSTEM', 'Local findSessions failed:', e.message);
-    }
+    } catch (e) { logWarn('SYSTEM', 'Local failed:', e.message); }
 
     if (sessions.length === 0 && sessionDB.isConfigured()) {
-      logInfo('SYSTEM', '🔍 No local sessions — fetching from DB API...');
+      logInfo('SYSTEM', '🔍 Fetching from DB...');
       const dbRes = await sessionDB.getAllSessions();
       if (dbRes.success && dbRes.sessions.length > 0) {
         sessions = dbRes.sessions.map(s => ({ sessionId: null, number: s.number }));
-        logOk('SYSTEM', `☁️ DB sessions found: ${sessions.length}`);
+        logOk('SYSTEM', `☁️ DB: ${sessions.length}`);
       }
     }
 
@@ -949,7 +797,7 @@ async function startAllSessions() {
       }
     } catch (e) {}
 
-    logInfo('SYSTEM', `🔄 Found ${sessions.length} sessions to reconnect.`);
+    logInfo('SYSTEM', `🔄 Found ${sessions.length} sessions`);
 
     for (const session of sessions) {
       const { sessionId, number } = session;
@@ -957,14 +805,14 @@ async function startAllSessions() {
       if (!sanitizedNumber) continue;
 
       if (activeSockets.has(sanitizedNumber)) {
-        logInfo(sanitizedNumber, 'Already connected. Skipping...');
+        logInfo(sanitizedNumber, 'Already connected. Skip');
         continue;
       }
 
       const sessionPath = path.join(SESSION_BASE_PATH, `session_${sanitizedNumber}`);
       const credsExist = fs.existsSync(path.join(sessionPath, 'creds.json'));
 
-      logInfo(sanitizedNumber, `Starting... credsExist=${credsExist}`);
+      logInfo(sanitizedNumber, `Start credsExist=${credsExist}`);
 
       try {
         if (!credsExist && sessionDB.isConfigured()) {
@@ -972,97 +820,67 @@ async function startAllSessions() {
           if (dbRes.success && dbRes.session) {
             const written = await writeLocalSession(sessionPath, dbRes.session.creds, dbRes.session.keys);
             if (!written) {
-              logErr(sanitizedNumber, 'Failed to restore session — skipping (needs re-pairing)');
+              logErr(sanitizedNumber, 'Restore failed — skip');
               continue;
             }
-            logOk(sanitizedNumber, '☁️ Restored from DB API');
+            logOk(sanitizedNumber, '☁️ Restored from DB');
           } else if (sessionId) {
             const dl = await sessionDownload(sessionId, sanitizedNumber);
-            if (!dl.success) {
-              logWarn(sanitizedNumber, `sessionDownload failed: ${dl.error}`);
-              continue;
-            }
+            if (!dl.success) { logWarn(sanitizedNumber, `MEGA failed: ${dl.error}`); continue; }
           } else {
-            logWarn(sanitizedNumber, 'No session in DB and no MEGA ID');
+            logWarn(sanitizedNumber, 'No source');
             continue;
           }
         } else if (!credsExist && sessionId) {
           const dl = await sessionDownload(sessionId, sanitizedNumber);
-          if (!dl.success) {
-            logWarn(sanitizedNumber, `sessionDownload failed: ${dl.error}`);
-            continue;
-          }
+          if (!dl.success) { logWarn(sanitizedNumber, `MEGA failed: ${dl.error}`); continue; }
         } else if (!credsExist) {
-          logWarn(sanitizedNumber, 'No creds.json and no source');
+          logWarn(sanitizedNumber, 'No creds');
           continue;
         }
 
         await silabot(sanitizedNumber, { headersSent: true, status: () => ({ send: () => {} }) });
-      } catch (err) {
-        logErr('SYSTEM', 'startAllSessions loop error:', err.message);
-      }
+      } catch (err) { logErr('SYSTEM', 'loop error:', err.message); }
     }
-    logOk('SYSTEM', '✅ Auto-reconnect process completed.');
-  } catch (err) {
-    logErr('SYSTEM', 'startAllSessions error:', err.message);
-    logErr('SYSTEM', err.stack);
-  }
+    logOk('SYSTEM', '✅ Done');
+  } catch (err) { logErr('SYSTEM', 'startAllSessions:', err.message); }
 }
 
 // ==================== ROUTER ====================
 router.get('/', async (req, res) => {
   try {
     const { number } = req.query;
-    if (!number) return res.status(400).send({ status: 'error', message: 'Number parameter is required' });
-
+    if (!number) return res.status(400).send({ status: 'error', message: 'Number required' });
     const sanitizedNumber = number.replace(/[^0-9]/g, '');
-    if (!sanitizedNumber || sanitizedNumber.length < 10) return res.status(400).send({ status: 'error', message: 'Invalid phone number format' });
-
-    if (activeSockets.has(sanitizedNumber)) return res.status(200).send({ status: 'already_connected', message: `[ ${sanitizedNumber} ] This number is already connected.` });
-
+    if (!sanitizedNumber || sanitizedNumber.length < 10) return res.status(400).send({ status: 'error', message: 'Invalid number' });
+    if (activeSockets.has(sanitizedNumber)) return res.status(200).send({ status: 'already_connected', message: `[${sanitizedNumber}] already connected` });
     await silabot(number, res);
   } catch (err) {
-    logErr('ROUTER', 'router / error:', err.message);
-    logErr('ROUTER', err.stack);
-    try { res.status(500).send({ status: 'error', message: 'Internal Server Error' }); } catch (e) {}
+    logErr('ROUTER', err.message);
+    try { res.status(500).send({ status: 'error', message: 'Internal error' }); } catch (e) {}
   }
 });
 
-// Route ya /code (kama unatumia hii)
 router.get('/code', async (req, res) => {
   try {
     const { number } = req.query;
-    if (!number) return res.status(400).send({ status: 'error', message: 'Number parameter is required' });
-
+    if (!number) return res.status(400).send({ status: 'error', message: 'Number required' });
     const sanitizedNumber = number.replace(/[^0-9]/g, '');
-    if (!sanitizedNumber || sanitizedNumber.length < 10) {
-      return res.status(400).send({ status: 'error', message: 'Invalid phone number format' });
-    }
-
-    if (activeSockets.has(sanitizedNumber)) {
-      return res.status(200).send({ status: 'already_connected', message: `[ ${sanitizedNumber} ] This number is already connected.` });
-    }
-
+    if (!sanitizedNumber || sanitizedNumber.length < 10) return res.status(400).send({ status: 'error', message: 'Invalid number' });
+    if (activeSockets.has(sanitizedNumber)) return res.status(200).send({ status: 'already_connected', message: `[${sanitizedNumber}] already connected` });
     await silabot(number, res);
   } catch (err) {
-    logErr('ROUTER', 'router /code error:', err.message);
-    logErr('ROUTER', err.stack);
-    try { res.status(500).send({ status: 'error', message: 'Internal Server Error' }); } catch (e) {}
+    logErr('ROUTER', err.message);
+    try { res.status(500).send({ status: 'error', message: 'Internal error' }); } catch (e) {}
   }
 });
 
-// ==================== DEBUG ENDPOINTS ====================
+// ==================== DEBUG ====================
 router.get('/debug/commands', (req, res) => {
   const cmds = getAllCommands();
   res.json({
     count: cmds.length,
-    commands: cmds.map(c => ({
-      name: c.name,
-      aliases: c.aliases,
-      category: c.category,
-      ownerOnly: !!c.ownerOnly,
-      groupOnly: !!c.groupOnly
-    })),
+    commands: cmds.map(c => ({ name: c.name, aliases: c.aliases, category: c.category, ownerOnly: !!c.ownerOnly, groupOnly: !!c.groupOnly })),
     registryKeys: Array.from(commands.keys())
   });
 });
@@ -1071,24 +889,16 @@ router.get('/debug/sockets', (req, res) => {
   res.json({
     count: activeSockets.size,
     sockets: Array.from(activeSockets.entries()).map(([num, sock]) => ({
-      number: num,
-      hasUser: !!sock.user,
-      userId: sock.user?.id,
-      wsState: sock.ws?.readyState,
-      registeredAt: socketCreationTime.get(num)
+      number: num, hasUser: !!sock.user, userId: sock.user?.id, wsState: sock.ws?.readyState
     }))
   });
 });
 
 router.get('/debug/health', (req, res) => {
   res.json({
-    status: 'ok',
-    uptime: process.uptime(),
-    memory: process.memoryUsage(),
-    commands: getAllCommands().length,
-    activeSockets: activeSockets.size,
-    sessionDBConfigured: sessionDB.isConfigured(),
-    logLevel: process.env.LOG_LEVEL || 'silent'
+    status: 'ok', uptime: process.uptime(), memory: process.memoryUsage(),
+    commands: getAllCommands().length, activeSockets: activeSockets.size,
+    sessionDBConfigured: sessionDB.isConfigured(), logLevel: process.env.LOG_LEVEL || 'silent'
   });
 });
 
@@ -1100,19 +910,16 @@ router.get('/debug/clear-sessions', async (req, res) => {
       if (folder.startsWith('session_')) {
         await fs.remove(path.join(SESSION_BASE_PATH, folder));
         removed.push(folder);
-        console.log(`Removed: ${folder}`);
       }
     }
-    res.json({ status: 'ok', message: 'Sessions cleared', removed });
-  } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
-  }
+    res.json({ status: 'ok', removed });
+  } catch (err) { res.status(500).json({ status: 'error', message: err.message }); }
 });
 
 // ==================== PROCESS EVENTS ====================
 process.on('exit', async () => {
   for (const [number, socket] of activeSockets.entries()) {
-    try { socket.ws?.close(); } catch (error) { logErr(number, 'Failed to close connection.'); }
+    try { socket.ws?.close(); } catch (e) {}
     activeSockets.delete(number);
     socketCreationTime.delete(number);
   }
@@ -1125,16 +932,15 @@ process.on('uncaughtException', (err) => {
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  logErr('UNHANDLED_REJECTION', 'at', promise, 'reason:', reason);
+  logErr('UNHANDLED_REJECTION', 'reason:', reason);
 });
 
-// Load commands mwanzoni
 loadCommands()
   .then(() => {
-    logOk('SYSTEM', `📦 Commands loaded: ${commands.size} entries`);
-    logOk('SYSTEM', `📋 Unique commands: ${getAllCommands().length}`);
-    logOk('SYSTEM', `🔑 Registry keys: ${Array.from(commands.keys()).join(', ')}`);
+    logOk('SYSTEM', `📦 Commands: ${commands.size} entries`);
+    logOk('SYSTEM', `📋 Unique: ${getAllCommands().length}`);
+    logOk('SYSTEM', `🔑 Keys: ${Array.from(commands.keys()).join(', ')}`);
   })
-  .catch(err => logErr('SYSTEM', 'Failed to load commands:', err));
+  .catch(err => logErr('SYSTEM', 'Load failed:', err));
 
 module.exports = { router, startAllSessions, loadCommands, silabot };
