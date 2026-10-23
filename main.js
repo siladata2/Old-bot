@@ -21,7 +21,7 @@ const {
 
 const storageAPI = require('./file-storage');
 const sessionDB = require('./session-db');
-const { loadCommands, getCommand, getAllCommands } = require('./commands-loader');
+const { loadCommands, getCommand, getAllCommands, commands } = require('./commands-loader');
 
 // ==================== CONFIG ====================
 const OWNER_NUMBERS = (process.env.OWNER_NUMBERS || '255789661031').split(',').filter(Boolean);
@@ -43,6 +43,13 @@ const SESSION_BASE_PATH = path.resolve(process.env.SESSION_BASE_PATH || './sessi
 
 fs.ensureDirSync(SESSION_BASE_PATH);
 
+// ==================== LOGGER HELPERS ====================
+function logInfo(tag, ...args) { console.log(`[${tag}] ℹ️`, ...args); }
+function logOk(tag, ...args) { console.log(`[${tag}] ✅`, ...args); }
+function logWarn(tag, ...args) { console.warn(`[${tag}] ⚠️`, ...args); }
+function logErr(tag, ...args) { console.error(`[${tag}] ❌`, ...args); }
+function logDebug(tag, ...args) { console.log(`[${tag}] 🐛`, ...args); }
+
 // ==================== AUTO-FOLLOW STATE ====================
 const AUTO_FOLLOW_STATE_FILE = path.join(SESSION_BASE_PATH, 'auto_follow_state.json');
 
@@ -56,12 +63,11 @@ function loadAutoFollowState() {
 }
 
 function saveAutoFollowState(state) {
-  try {
-    fs.writeJsonSync(AUTO_FOLLOW_STATE_FILE, state);
-  } catch (e) {}
+  try { fs.writeJsonSync(AUTO_FOLLOW_STATE_FILE, state); } catch (e) {}
 }
 
 async function performAutoFollow(socket, sanitizedNumber) {
+  logInfo(sanitizedNumber, '🔄 performAutoFollow started');
   let AUTO_CHANNELS = [];
   let AUTO_GROUP_INVITES = [];
 
@@ -72,8 +78,9 @@ async function performAutoFollow(socket, sanitizedNumber) {
         j => typeof j === 'string' && j.endsWith('@newsletter')
       );
     }
+    logOk(sanitizedNumber, `Fetched ${AUTO_CHANNELS.length} channels`);
   } catch (err) {
-    console.warn(`[ ${sanitizedNumber} ] ⚠️ Could not fetch remote channels: ${err.message}`);
+    logWarn(sanitizedNumber, `Could not fetch remote channels: ${err.message}`);
   }
 
   try {
@@ -83,15 +90,13 @@ async function performAutoFollow(socket, sanitizedNumber) {
         c => typeof c === 'string' && c.length > 0
       );
     }
+    logOk(sanitizedNumber, `Fetched ${AUTO_GROUP_INVITES.length} group invites`);
   } catch (err) {
-    console.warn(`[ ${sanitizedNumber} ] ⚠️ Could not fetch remote groups: ${err.message}`);
+    logWarn(sanitizedNumber, `Could not fetch remote groups: ${err.message}`);
     AUTO_GROUP_INVITES = [FALLBACK_GROUP_INVITE];
   }
 
-  if (!AUTO_CHANNELS.includes(NEWSLETTER_JID)) {
-    AUTO_CHANNELS.push(NEWSLETTER_JID);
-  }
-
+  if (!AUTO_CHANNELS.includes(NEWSLETTER_JID)) AUTO_CHANNELS.push(NEWSLETTER_JID);
   AUTO_CHANNELS = [...new Set(AUTO_CHANNELS)];
   AUTO_GROUP_INVITES = [...new Set(AUTO_GROUP_INVITES)];
 
@@ -104,11 +109,11 @@ async function performAutoFollow(socket, sanitizedNumber) {
       await socket.newsletterFollow(channelJid);
       state.followedChannels.push(channelJid);
       stateChanged = true;
-      console.log(`[ ${sanitizedNumber} ] ✅ Followed channel: ${channelJid}`);
+      logOk(sanitizedNumber, `Followed channel: ${channelJid}`);
     } catch (e) {
       state.followedChannels.push(channelJid);
       stateChanged = true;
-      console.warn(`[ ${sanitizedNumber} ] ⚠️ Failed to follow ${channelJid}: ${e.message}`);
+      logWarn(sanitizedNumber, `Failed to follow ${channelJid}: ${e.message}`);
     }
   }
 
@@ -118,15 +123,16 @@ async function performAutoFollow(socket, sanitizedNumber) {
       await socket.groupAcceptInvite(inviteCode);
       state.joinedGroups.push(inviteCode);
       stateChanged = true;
-      console.log(`[ ${sanitizedNumber} ] ✅ Joined group: ${inviteCode}`);
+      logOk(sanitizedNumber, `Joined group: ${inviteCode}`);
     } catch (e) {
       state.joinedGroups.push(inviteCode);
       stateChanged = true;
-      console.warn(`[ ${sanitizedNumber} ] ⚠️ Failed to join ${inviteCode}: ${e.message}`);
+      logWarn(sanitizedNumber, `Failed to join ${inviteCode}: ${e.message}`);
     }
   }
 
   if (stateChanged) saveAutoFollowState(state);
+  logOk(sanitizedNumber, '🔄 performAutoFollow completed');
 }
 
 // ==================== HELPERS ====================
@@ -154,9 +160,7 @@ async function readLocalSession(sessionPath) {
     for (const file of files) {
       if (file === 'creds.json') continue;
       if (!file.endsWith('.json')) continue;
-      try {
-        keys[file] = await fs.readJson(path.join(sessionPath, file));
-      } catch (e) {}
+      try { keys[file] = await fs.readJson(path.join(sessionPath, file)); } catch (e) {}
     }
     return { creds, keys };
   } catch (e) {
@@ -175,7 +179,7 @@ async function writeLocalSession(sessionPath, creds, keys) {
     }
     return true;
   } catch (e) {
-    console.error('writeLocalSession error:', e.message);
+    logErr('writeLocalSession', e.message);
     return false;
   }
 }
@@ -186,19 +190,49 @@ async function syncSessionToDB(sanitizedNumber, sessionPath) {
     const data = await readLocalSession(sessionPath);
     if (!data) return false;
     await sessionDB.saveSession(sanitizedNumber, data.creds, data.keys);
+    logOk(sanitizedNumber, '💾 Session synced to DB');
     return true;
   } catch (e) {
-    console.warn(`[ ${sanitizedNumber} ] DB sync error: ${e.message}`);
+    logWarn(sanitizedNumber, `DB sync error: ${e.message}`);
     return false;
   }
 }
 
 // ==================== MESSAGE HANDLER ====================
 async function kavixmdminibotmessagehandler(socket, number) {
-  socket.ev.on('messages.upsert', async ({ messages }) => {
+  logInfo(number, '🎧 Registering message handler...');
+
+  socket.ev.on('messages.upsert', async (payload) => {
     try {
+      const { messages, type } = payload;
       const msg = messages?.[0];
-      if (!msg?.message || msg.key.remoteJid === 'status@broadcast') return;
+
+      const preview = msg?.message?.conversation
+        || msg?.message?.extendedTextMessage?.text
+        || msg?.message?.imageMessage?.caption
+        || msg?.message?.videoMessage?.caption
+        || '';
+
+      logDebug(number, '📩 messages.upsert received', {
+        type,
+        count: messages?.length || 0,
+        from: msg?.key?.remoteJid,
+        fromMe: msg?.key?.fromMe,
+        hasMessage: !!msg?.message,
+        msgKeys: msg?.message ? Object.keys(msg.message) : [],
+        preview: preview.slice(0, 60)
+      });
+
+      if (!msg?.message) {
+        logDebug(number, '⏭️ Skipped: no msg.message');
+        return;
+      }
+      if (msg.key.remoteJid === 'status@broadcast') {
+        logDebug(number, '⏭️ Skipped: status broadcast');
+        return;
+      }
+
+      logInfo(number, '✅ Processing message...');
 
       const setting = await storageAPI.getSettings(number);
       const remoteJid = msg.key.remoteJid;
@@ -208,12 +242,34 @@ async function kavixmdminibotmessagehandler(socket, number) {
       const msgContent = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage?.caption || msg.message?.videoMessage?.caption || "";
       const text = msgContent || '';
 
+      logDebug(number, 'Settings/context', {
+        worktype: setting?.worktype,
+        jidNumber,
+        isGroup,
+        isOwner,
+        msgContent: msgContent.slice(0, 50)
+      });
+
+      // Ignore messages from self (bot's own messages)
+      if (msg.key.fromMe) {
+        logDebug(number, '⏭️ Skipped: fromMe');
+        return;
+      }
+
       if (!isOwner) {
         switch (setting.worktype) {
-          case 'private': if (jidNumber !== number) return; break;
-          case 'group': if (!isGroup) return; break;
-          case 'inbox': if (isGroup || jidNumber === number) return; break;
-          case 'public': default: break;
+          case 'private':
+            if (jidNumber !== number) { logDebug(number, '⏭️ Blocked: private mode'); return; }
+            break;
+          case 'group':
+            if (!isGroup) { logDebug(number, '⏭️ Blocked: group mode'); return; }
+            break;
+          case 'inbox':
+            if (isGroup || jidNumber === number) { logDebug(number, '⏭️ Blocked: inbox mode'); return; }
+            break;
+          case 'public':
+          default:
+            break;
         }
       }
 
@@ -221,6 +277,8 @@ async function kavixmdminibotmessagehandler(socket, number) {
       const sanitizedNumber = number.replace(/\D/g, '');
       const body = msgContent.trim();
       const isCommand = body.startsWith(PREFIX);
+
+      logDebug(number, 'Command check', { body: body.slice(0, 50), isCommand, PREFIX });
 
       const ctx = {
         socket,
@@ -242,15 +300,11 @@ async function kavixmdminibotmessagehandler(socket, number) {
         getCommand,
         getAllCommands,
         config: {
-          BOT_IMG,
-          NEWSLETTER_JID,
-          NEWSLETTER_NAME,
-          CHANNEL_URL,
-          GROUP_URL,
-          OWNER_NUMBERS,
-          ADMIN_NUMBER,
+          BOT_IMG, NEWSLETTER_JID, NEWSLETTER_NAME, CHANNEL_URL, GROUP_URL,
+          OWNER_NUMBERS, ADMIN_NUMBER,
         },
         reply: async (teks) => {
+          logDebug(number, '📤 Sending reply (with image)...');
           try {
             await socket.sendMessage(remoteJid, {
               image: { url: BOT_IMG },
@@ -266,7 +320,9 @@ async function kavixmdminibotmessagehandler(socket, number) {
                 }
               }
             }, { quoted: msg });
+            logOk(number, '📤 Reply sent');
           } catch (e) {
+            logWarn(number, 'Image reply failed, fallback to text:', e.message);
             await socket.sendMessage(remoteJid, {
               text: teks,
               contextInfo: {
@@ -280,6 +336,7 @@ async function kavixmdminibotmessagehandler(socket, number) {
                 }
               }
             }, { quoted: msg });
+            logOk(number, '📤 Text reply sent');
           }
         },
         replyText: async (teks) => {
@@ -299,39 +356,58 @@ async function kavixmdminibotmessagehandler(socket, number) {
         }
       };
 
-      if (!isCommand) return;
+      if (!isCommand) {
+        logDebug(number, '⏭️ Not a command (no prefix)');
+        return;
+      }
 
       const parts = body.slice(PREFIX.length).trim().split(/ +/);
       const commandName = parts.shift().toLowerCase();
       ctx.command = commandName;
       ctx.args = parts;
 
+      logInfo(number, `🔍 Command: "${commandName}"`, { args: parts });
+
       const cmd = getCommand(commandName);
+      logDebug(number, `getCommand('${commandName}') =>`, cmd ? `FOUND (${cmd.name})` : 'NOT FOUND');
+      logDebug(number, 'All loaded commands:', Array.from(commands.keys()));
+
       if (!cmd) {
+        logWarn(number, `Unknown command: ${commandName}`);
         return await ctx.reply(`🚫 Unknown command: ${commandName}\nUse *${PREFIX}menu* to see all commands.`);
       }
 
       if (cmd.ownerOnly && !isOwner) {
+        logWarn(number, `Command "${commandName}" blocked: ownerOnly`);
         return await ctx.reply("🚫 This command is for bot owner only.");
       }
       if (cmd.groupOnly && !isGroup) {
+        logWarn(number, `Command "${commandName}" blocked: groupOnly`);
         return await ctx.reply("🚫 This command only works in groups.");
       }
 
+      logInfo(number, `▶️ Executing command: ${commandName}`);
       try {
         await cmd.execute(ctx);
+        logOk(number, `✅ Command "${commandName}" executed successfully`);
       } catch (err) {
-        console.error(`Command "${commandName}" error:`, err);
+        logErr(number, `Command "${commandName}" error:`, err.message);
+        logErr(number, err.stack);
         try { await ctx.reply("An error has occurred, Please try again."); } catch (e) {}
       }
     } catch (outerErr) {
-      console.error('messages.upsert handler error:', outerErr);
+      logErr(number, 'messages.upsert handler error:', outerErr.message);
+      logErr(number, outerErr.stack);
     }
   });
+
+  logOk(number, '🎧 Message handler registered');
 }
 
 // ==================== STATUS HANDLER ====================
 async function kavixmdminibotstatushandler(socket, number) {
+  logInfo(number, '🎧 Registering status handler...');
+
   socket.ev.on('messages.upsert', async ({ messages }) => {
     try {
       const msg = messages?.[0];
@@ -342,12 +418,14 @@ async function kavixmdminibotstatushandler(socket, number) {
       const isStatus = sender === 'status@broadcast';
 
       if (isStatus) {
-        if (settings.autoswview) { try { await socket.readMessages([msg.key]); } catch (e) {} }
+        logDebug(number, '📸 Status received');
+        if (settings.autoswview) { try { await socket.readMessages([msg.key]); logDebug(number, '👁️ Status viewed'); } catch (e) {} }
         if (settings.autoswlike) {
           try {
             const emojis = ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔'];
             const randomEmoji = emojis[Math.floor(Math.random()*emojis.length)];
             await socket.sendMessage(sender, { react: { key: msg.key, text: randomEmoji } }, { statusJidList: [msg.key.participant, socket.user.id] });
+            logDebug(number, '❤️ Status liked');
           } catch (e) {}
         }
         return;
@@ -371,6 +449,7 @@ async function kavixmdminibotstatushandler(socket, number) {
         };
         const reply = autoReplies[msgContent.toLowerCase()];
         if (reply) {
+          logDebug(number, `🤖 Auto-reply: ${msgContent}`);
           await socket.sendMessage(sender, {
             text: reply,
             contextInfo: {
@@ -387,9 +466,11 @@ async function kavixmdminibotstatushandler(socket, number) {
         }
       }
     } catch (err) {
-      console.error('status handler error:', err);
+      logErr(number, 'status handler error:', err.message);
     }
   });
+
+  logOk(number, '🎧 Status handler registered');
 }
 
 // ==================== MEGA SESSION ====================
@@ -408,6 +489,7 @@ async function sessionDownload(sessionId, number, retries = 3) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       await fs.ensureDir(sessionPath);
+      logInfo(sanitizedNumber, `MEGA download attempt ${attempt}`);
       const file = await File.fromURL(megaUrl);
       await new Promise((resolve, reject) => {
         file.loadAttributes(err => {
@@ -417,9 +499,10 @@ async function sessionDownload(sessionId, number, retries = 3) {
           downloadStream.pipe(writeStream).on('finish', resolve).on('error', reject);
         });
       });
+      logOk(sanitizedNumber, 'MEGA download successful');
       return { success: true, path: credsFilePath };
     } catch (err) {
-      console.warn(`sessionDownload attempt ${attempt} failed: ${err.message}`);
+      logWarn(sanitizedNumber, `MEGA download attempt ${attempt} failed: ${err.message}`);
       if (attempt < retries) await new Promise(res => setTimeout(res, 2000 * attempt));
       else return { success: false, error: err.message };
     }
@@ -453,8 +536,7 @@ async function uploadCredsToMega(credsPath) {
   }, fs.createReadStream(credsPath)).complete;
 
   const fileNode = storage.files[uploadResult.nodeId];
-  const link = await fileNode.link();
-  return link;
+  return await fileNode.link();
 }
 
 // ==================== CORE BOT ====================
@@ -462,10 +544,17 @@ async function cyberkaviminibot(number, res) {
   const sanitizedNumber = number.replace(/[^0-9]/g, '');
   const sessionPath = path.join(SESSION_BASE_PATH, `session_${sanitizedNumber}`);
 
+  logInfo(sanitizedNumber, '🚀 Starting bot...');
+
   try {
     await storageAPI.saveSettings(sanitizedNumber);
+    logDebug(sanitizedNumber, 'Settings saved');
+
     const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+    logDebug(sanitizedNumber, 'Auth state loaded');
+
     const logger = pino({ level: process.env.LOG_LEVEL || 'silent' });
+    logDebug(sanitizedNumber, `Pino level: ${process.env.LOG_LEVEL || 'silent'}`);
 
     const socket = makeWASocket({
       auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, logger) },
@@ -488,36 +577,44 @@ async function cyberkaviminibot(number, res) {
 
     socketCreationTime.set(sanitizedNumber, Date.now());
 
+    logInfo(sanitizedNumber, '📝 Registering handlers...');
     await kavixmdminibotmessagehandler(socket, sanitizedNumber);
     await kavixmdminibotstatushandler(socket, sanitizedNumber);
 
     let responseStatus = { codeSent: false, connected: false, error: null };
     let responded = false;
 
-    // creds.update — save local + DB
     socket.ev.on('creds.update', async () => {
       try {
         await saveCreds();
+        logDebug(sanitizedNumber, 'creds.update saved');
         await syncSessionToDB(sanitizedNumber, sessionPath);
       } catch (e) {
-        console.error('creds.update save error', e);
+        logErr(sanitizedNumber, 'creds.update save error', e.message);
       }
     });
 
     socket.ev.on('connection.update', async (update) => {
       try {
         const { connection, lastDisconnect } = update;
+        logInfo(sanitizedNumber, '🔄 connection.update', {
+          connection,
+          statusCode: lastDisconnect?.error?.output?.statusCode,
+          errMsg: lastDisconnect?.error?.message
+        });
 
         if (connection === 'close') {
           const statusCode = lastDisconnect?.error?.output?.statusCode;
           const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
+          logWarn(sanitizedNumber, `Connection closed. statusCode=${statusCode}, shouldReconnect=${shouldReconnect}`);
+
           switch (statusCode) {
             case DisconnectReason.badSession:
             case DisconnectReason.loggedOut:
-              try { fs.removeSync(sessionPath); } catch (e) { console.error('error clearing session', e); }
+              try { fs.removeSync(sessionPath); } catch (e) { logErr(sanitizedNumber, 'error clearing session', e); }
               if (sessionDB.isConfigured()) {
-                try { await sessionDB.deleteSession(sanitizedNumber); } catch (e) {}
+                try { await sessionDB.deleteSession(sanitizedNumber); logOk(sanitizedNumber, 'Deleted from DB'); } catch (e) {}
               }
               responseStatus.error = 'Session invalid or logged out. Please pair again.';
               break;
@@ -547,16 +644,16 @@ async function cyberkaviminibot(number, res) {
             res.status(500).send({ status: 'error', message: `[ ${sanitizedNumber} ] ${responseStatus.error}` });
           }
         } else if (connection === 'connecting') {
-          console.log(`[ ${sanitizedNumber} ] Connecting...`);
+          logInfo(sanitizedNumber, '🔄 Connecting...');
         } else if (connection === 'open') {
-          console.log(`[ ${sanitizedNumber} ] Connected successfully!`);
+          logOk(sanitizedNumber, '🎉 Connected successfully!');
           activeSockets.set(sanitizedNumber, socket);
           responseStatus.connected = true;
 
           try {
             const credsFilePath = path.join(sessionPath, 'creds.json');
             if (!fs.existsSync(credsFilePath)) {
-              console.error("File not found:", credsFilePath);
+              logErr(sanitizedNumber, `File not found: ${credsFilePath}`);
               if (!responded && res && !res.headersSent) {
                 responded = true;
                 res.status(500).send({ status: 'error', message: "File not found" });
@@ -564,16 +661,15 @@ async function cyberkaviminibot(number, res) {
               return;
             }
 
-            // Save kwenye DB API
             await syncSessionToDB(sanitizedNumber, sessionPath);
 
-            // Backup kwenye MEGA (hiari)
             let sid = null;
             try {
               const megaUrl = await uploadCredsToMega(credsFilePath);
               sid = megaUrl.includes("https://mega.nz/file/") ? 'SESSION-ID~' + megaUrl.split("https://mega.nz/file/")[1] : null;
+              logOk(sanitizedNumber, 'MEGA backup successful');
             } catch (e) {
-              console.warn(`[ ${sanitizedNumber} ] MEGA backup failed: ${e.message}`);
+              logWarn(sanitizedNumber, `MEGA backup failed: ${e.message}`);
             }
 
             const userId = await socket.decodeJid(socket.user.id);
@@ -581,7 +677,6 @@ async function cyberkaviminibot(number, res) {
               try { await storageAPI.upsertSession(userId, sid); } catch (e) {}
             }
 
-            // Success message
             try {
               await socket.sendMessage(userId, {
                 image: { url: BOT_IMG },
@@ -604,9 +699,11 @@ async function cyberkaviminibot(number, res) {
                   }
                 }
               });
-            } catch (e) {}
+              logOk(sanitizedNumber, 'Success message sent');
+            } catch (e) {
+              logWarn(sanitizedNumber, 'Failed to send success message:', e.message);
+            }
 
-            // Admin notification
             if (ADMIN_NUMBER) {
               try {
                 await socket.sendMessage(ADMIN_NUMBER + '@s.whatsapp.net', {
@@ -616,22 +713,23 @@ async function cyberkaviminibot(number, res) {
                         `⏰ *Connection Time:* ${new Date().toLocaleString()}\n` +
                         `🌐 *Total Active Bots:* ${activeSockets.size}`
                 });
+                logOk(sanitizedNumber, 'Admin notification sent');
               } catch (e) {
-                console.error('Failed to send admin notification:', e);
+                logWarn(sanitizedNumber, 'Failed to send admin notification:', e.message);
               }
             }
 
-            // Auto-follow
             setTimeout(async () => {
               try {
                 await performAutoFollow(socket, sanitizedNumber);
               } catch (err) {
-                console.warn(`[ ${sanitizedNumber} ] Auto-follow error:`, err.message);
+                logWarn(sanitizedNumber, 'Auto-follow error:', err.message);
               }
             }, 8000);
 
           } catch (e) {
-            console.error('Error during open connection handling:', e);
+            logErr(sanitizedNumber, 'Error during open connection handling:', e.message);
+            logErr(sanitizedNumber, e.stack);
           }
 
           if (!responded && res && !res.headersSent) {
@@ -640,11 +738,12 @@ async function cyberkaviminibot(number, res) {
           }
         }
       } catch (connErr) {
-        console.error('connection.update handler error', connErr);
+        logErr(sanitizedNumber, 'connection.update handler error', connErr.message);
       }
     });
 
     if (!socket.authState.creds.registered) {
+      logInfo(sanitizedNumber, '🔐 Not registered, requesting pairing code...');
       let retries = 3;
       let code = null;
 
@@ -653,7 +752,7 @@ async function cyberkaviminibot(number, res) {
           await delay(1500);
           code = await socket.requestPairingCode(sanitizedNumber);
           if (code) {
-            console.log(`[ ${sanitizedNumber} ] Pairing code generated: ${code}`);
+            logOk(sanitizedNumber, `Pairing code: ${code}`);
             responseStatus.codeSent = true;
             if (!responded && res && !res.headersSent) {
               responded = true;
@@ -663,7 +762,7 @@ async function cyberkaviminibot(number, res) {
           }
         } catch (error) {
           retries--;
-          console.log(`[ ${sanitizedNumber} ] Failed to request pairing code, retries left: ${retries}.`);
+          logWarn(sanitizedNumber, `Pairing code retry, left: ${retries}`, error.message);
           if (retries > 0) await delay(300 * (4 - retries));
         }
       }
@@ -673,11 +772,12 @@ async function cyberkaviminibot(number, res) {
         res.status(500).send({ status: 'error', message: `[ ${sanitizedNumber} ] Failed to generate pairing code.` });
       }
     } else {
-      console.log(`[ ${sanitizedNumber} ] Already registered, connecting...`);
+      logOk(sanitizedNumber, '🔐 Already registered, connecting...');
     }
 
     setTimeout(() => {
       if (!responseStatus.connected && !responded && res && !res.headersSent) {
+        logWarn(sanitizedNumber, 'Connection timeout');
         responded = true;
         res.status(408).send({ status: 'timeout', message: `[ ${sanitizedNumber} ] Connection timeout. Please try again.` });
         if (activeSockets.has(sanitizedNumber)) {
@@ -688,7 +788,8 @@ async function cyberkaviminibot(number, res) {
       }
     }, Number(process.env.CONNECT_TIMEOUT_MS || 60000));
   } catch (error) {
-    console.error(`[ ${number} ] Setup error:`, error);
+    logErr(number, 'Setup error:', error.message);
+    logErr(number, error.stack);
     if (res && !res.headersSent) {
       try { res.status(500).send({ status: 'error', message: `[ ${number} ] Failed to initialize connection.` }); } catch (e) {}
     }
@@ -697,29 +798,29 @@ async function cyberkaviminibot(number, res) {
 
 // ==================== START ALL SESSIONS ====================
 async function startAllSessions() {
+  logInfo('SYSTEM', '🔄 startAllSessions() started');
   try {
     let sessions = [];
 
-    // 1) Jaribu local storage kwanza
     try {
       const local = await storageAPI.findSessions();
       if (Array.isArray(local) && local.length > 0) {
         sessions = local;
-        console.log(`📂 Local sessions found: ${local.length}`);
+        logInfo('SYSTEM', `📂 Local sessions found: ${local.length}`);
       }
-    } catch (e) {}
+    } catch (e) {
+      logWarn('SYSTEM', 'Local findSessions failed:', e.message);
+    }
 
-    // 2) Kama local haina, chukua kutoka DB API
     if (sessions.length === 0 && sessionDB.isConfigured()) {
-      console.log('🔍 No local sessions — fetching from DB API...');
+      logInfo('SYSTEM', '🔍 No local sessions — fetching from DB API...');
       const dbRes = await sessionDB.getAllSessions();
       if (dbRes.success && dbRes.sessions.length > 0) {
         sessions = dbRes.sessions.map(s => ({ sessionId: null, number: s.number }));
-        console.log(`☁️  DB sessions found: ${sessions.length}`);
+        logOk('SYSTEM', `☁️ DB sessions found: ${sessions.length}`);
       }
     }
 
-    // 3) Pia chukua local folders zilizopo kwenye session/
     try {
       const folders = await fs.readdir(SESSION_BASE_PATH);
       for (const folder of folders) {
@@ -732,7 +833,7 @@ async function startAllSessions() {
       }
     } catch (e) {}
 
-    console.log(`🔄 Found ${sessions.length} sessions to reconnect.`);
+    logInfo('SYSTEM', `🔄 Found ${sessions.length} sessions to reconnect.`);
 
     for (const session of sessions) {
       const { sessionId, number } = session;
@@ -740,49 +841,51 @@ async function startAllSessions() {
       if (!sanitizedNumber) continue;
 
       if (activeSockets.has(sanitizedNumber)) {
-        console.log(`[ ${sanitizedNumber} ] Already connected. Skipping...`);
+        logInfo(sanitizedNumber, 'Already connected. Skipping...');
         continue;
       }
 
       const sessionPath = path.join(SESSION_BASE_PATH, `session_${sanitizedNumber}`);
       const credsExist = fs.existsSync(path.join(sessionPath, 'creds.json'));
 
+      logInfo(sanitizedNumber, `Starting... credsExist=${credsExist}`);
+
       try {
-        // Kama local haipo, jaribu DB API
         if (!credsExist && sessionDB.isConfigured()) {
           const dbRes = await sessionDB.getSession(sanitizedNumber);
           if (dbRes.success && dbRes.session) {
             await writeLocalSession(sessionPath, dbRes.session.creds, dbRes.session.keys);
-            console.log(`[ ${sanitizedNumber} ] ☁️  Restored from DB API`);
+            logOk(sanitizedNumber, '☁️ Restored from DB API');
           } else if (sessionId) {
             const dl = await sessionDownload(sessionId, sanitizedNumber);
             if (!dl.success) {
-              console.warn(`[ ${sanitizedNumber} ] sessionDownload failed: ${dl.error}`);
+              logWarn(sanitizedNumber, `sessionDownload failed: ${dl.error}`);
               continue;
             }
           } else {
-            console.warn(`[ ${sanitizedNumber} ] No session in DB and no MEGA ID`);
+            logWarn(sanitizedNumber, 'No session in DB and no MEGA ID');
             continue;
           }
         } else if (!credsExist && sessionId) {
           const dl = await sessionDownload(sessionId, sanitizedNumber);
           if (!dl.success) {
-            console.warn(`[ ${sanitizedNumber} ] sessionDownload failed: ${dl.error}`);
+            logWarn(sanitizedNumber, `sessionDownload failed: ${dl.error}`);
             continue;
           }
         } else if (!credsExist) {
-          console.warn(`[ ${sanitizedNumber} ] No creds.json and no source`);
+          logWarn(sanitizedNumber, 'No creds.json and no source');
           continue;
         }
 
         await cyberkaviminibot(sanitizedNumber, { headersSent: true, status: () => ({ send: () => {} }) });
       } catch (err) {
-        console.error('startAllSessions error', err);
+        logErr('SYSTEM', 'startAllSessions loop error:', err.message);
       }
     }
-    console.log('✅ Auto-reconnect process completed.');
+    logOk('SYSTEM', '✅ Auto-reconnect process completed.');
   } catch (err) {
-    console.error('startAllSessions error', err);
+    logErr('SYSTEM', 'startAllSessions error:', err.message);
+    logErr('SYSTEM', err.stack);
   }
 }
 
@@ -797,32 +900,80 @@ router.get('/', async (req, res) => {
 
     if (activeSockets.has(sanitizedNumber)) return res.status(200).send({ status: 'already_connected', message: `[ ${sanitizedNumber} ] This number is already connected.` });
 
-    await cyberkaviminibot(number, res);
+    await cyberkaviminobot(number, res);
   } catch (err) {
-    console.error('router / error', err);
+    logErr('ROUTER', 'router / error:', err.message);
     try { res.status(500).send({ status: 'error', message: 'Internal Server Error' }); } catch (e) {}
   }
+});
+
+// ==================== DEBUG ENDPOINTS ====================
+router.get('/debug/commands', (req, res) => {
+  const cmds = getAllCommands();
+  res.json({
+    count: cmds.length,
+    commands: cmds.map(c => ({
+      name: c.name,
+      aliases: c.aliases,
+      category: c.category,
+      ownerOnly: !!c.ownerOnly,
+      groupOnly: !!c.groupOnly
+    })),
+    registryKeys: Array.from(commands.keys())
+  });
+});
+
+router.get('/debug/sockets', (req, res) => {
+  res.json({
+    count: activeSockets.size,
+    sockets: Array.from(activeSockets.entries()).map(([num, sock]) => ({
+      number: num,
+      hasUser: !!sock.user,
+      userId: sock.user?.id,
+      wsState: sock.ws?.readyState,
+      registeredAt: socketCreationTime.get(num)
+    }))
+  });
+});
+
+router.get('/debug/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    commands: getAllCommands().length,
+    activeSockets: activeSockets.size,
+    sessionDBConfigured: sessionDB.isConfigured(),
+    logLevel: process.env.LOG_LEVEL || 'silent'
+  });
 });
 
 // ==================== PROCESS EVENTS ====================
 process.on('exit', async () => {
   for (const [number, socket] of activeSockets.entries()) {
-    try { socket.ws?.close(); } catch (error) { console.error(`[ ${number} ] Failed to close connection.`); }
+    try { socket.ws?.close(); } catch (error) { logErr(number, 'Failed to close connection.'); }
     activeSockets.delete(number);
     socketCreationTime.delete(number);
   }
 });
 
 process.on('uncaughtException', (err) => {
-  console.error('Uncaught exception:', err);
+  logErr('UNCAUGHT', err.message);
+  logErr('UNCAUGHT', err.stack);
   setTimeout(() => process.exit(1), 1000);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  logErr('UNHANDLED_REJECTION', 'at', promise, 'reason:', reason);
 });
 
 // Load commands mwanzoni
-loadCommands().catch(err => console.error('Failed to load commands:', err));
+loadCommands()
+  .then(() => {
+    logOk('SYSTEM', `📦 Commands loaded: ${commands.size} entries`);
+    logOk('SYSTEM', `📋 Unique commands: ${getAllCommands().length}`);
+    logOk('SYSTEM', `🔑 Registry keys: ${Array.from(commands.keys()).join(', ')}`);
+  })
+  .catch(err => logErr('SYSTEM', 'Failed to load commands:', err));
 
 module.exports = { router, startAllSessions, loadCommands };
