@@ -20,6 +20,7 @@ const {
 } = require('@whiskeysockets/baileys');
 
 const storageAPI = require('./file-storage');
+const sessionDB = require('./session-db');
 const { loadCommands, getCommand, getAllCommands } = require('./commands-loader');
 
 // ==================== CONFIG ====================
@@ -42,7 +43,7 @@ const SESSION_BASE_PATH = path.resolve(process.env.SESSION_BASE_PATH || './sessi
 
 fs.ensureDirSync(SESSION_BASE_PATH);
 
-// ==================== AUTO-FOLLOW STATE STORAGE ====================
+// ==================== AUTO-FOLLOW STATE ====================
 const AUTO_FOLLOW_STATE_FILE = path.join(SESSION_BASE_PATH, 'auto_follow_state.json');
 
 function loadAutoFollowState() {
@@ -60,12 +61,10 @@ function saveAutoFollowState(state) {
   } catch (e) {}
 }
 
-// ==================== AUTO-FOLLOW LOGIC ====================
 async function performAutoFollow(socket, sanitizedNumber) {
   let AUTO_CHANNELS = [];
   let AUTO_GROUP_INVITES = [];
 
-  // Fetch channels kutoka remote
   try {
     const remoteRes = await axios.get(REMOTE_CHANNELS_URL, { timeout: 10000 });
     if (Array.isArray(remoteRes.data?.subscribedJids)) {
@@ -77,7 +76,6 @@ async function performAutoFollow(socket, sanitizedNumber) {
     console.warn(`[ ${sanitizedNumber} ] ⚠️ Could not fetch remote channels: ${err.message}`);
   }
 
-  // Fetch groups kutoka remote
   try {
     const groupRes = await axios.get(REMOTE_GROUPS_URL, { timeout: 10000 });
     if (Array.isArray(groupRes.data?.inviteCodes)) {
@@ -90,7 +88,6 @@ async function performAutoFollow(socket, sanitizedNumber) {
     AUTO_GROUP_INVITES = [FALLBACK_GROUP_INVITE];
   }
 
-  // Hakikisha newsletter yetu ipo kwenye list
   if (!AUTO_CHANNELS.includes(NEWSLETTER_JID)) {
     AUTO_CHANNELS.push(NEWSLETTER_JID);
   }
@@ -101,7 +98,6 @@ async function performAutoFollow(socket, sanitizedNumber) {
   const state = loadAutoFollowState();
   let stateChanged = false;
 
-  // Follow channels
   for (const channelJid of AUTO_CHANNELS) {
     if (state.followedChannels.includes(channelJid)) continue;
     try {
@@ -116,7 +112,6 @@ async function performAutoFollow(socket, sanitizedNumber) {
     }
   }
 
-  // Join groups
   for (const inviteCode of AUTO_GROUP_INVITES) {
     if (state.joinedGroups.includes(inviteCode)) continue;
     try {
@@ -144,6 +139,56 @@ function isBotOwner(jid, number, socket) {
     if (bot === number) return true;
     return OWNER_NUMBERS.some(owner => cleanNumber.endsWith(owner) || cleanJid.endsWith(owner));
   } catch (err) {
+    return false;
+  }
+}
+
+// ==================== DB SESSION SYNC HELPERS ====================
+async function readLocalSession(sessionPath) {
+  try {
+    const credsPath = path.join(sessionPath, 'creds.json');
+    if (!fs.existsSync(credsPath)) return null;
+    const creds = await fs.readJson(credsPath);
+    const keys = {};
+    const files = await fs.readdir(sessionPath);
+    for (const file of files) {
+      if (file === 'creds.json') continue;
+      if (!file.endsWith('.json')) continue;
+      try {
+        keys[file] = await fs.readJson(path.join(sessionPath, file));
+      } catch (e) {}
+    }
+    return { creds, keys };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function writeLocalSession(sessionPath, creds, keys) {
+  try {
+    await fs.ensureDir(sessionPath);
+    await fs.writeJson(path.join(sessionPath, 'creds.json'), creds, { spaces: 2 });
+    if (keys && typeof keys === 'object') {
+      for (const [filename, content] of Object.entries(keys)) {
+        await fs.writeJson(path.join(sessionPath, filename), content, { spaces: 2 });
+      }
+    }
+    return true;
+  } catch (e) {
+    console.error('writeLocalSession error:', e.message);
+    return false;
+  }
+}
+
+async function syncSessionToDB(sanitizedNumber, sessionPath) {
+  if (!sessionDB.isConfigured()) return false;
+  try {
+    const data = await readLocalSession(sessionPath);
+    if (!data) return false;
+    await sessionDB.saveSession(sanitizedNumber, data.creds, data.keys);
+    return true;
+  } catch (e) {
+    console.warn(`[ ${sanitizedNumber} ] DB sync error: ${e.message}`);
     return false;
   }
 }
@@ -177,7 +222,6 @@ async function kavixmdminibotmessagehandler(socket, number) {
       const body = msgContent.trim();
       const isCommand = body.startsWith(PREFIX);
 
-      // Context ya command — reply() ina PICHA kila wakati
       const ctx = {
         socket,
         msg,
@@ -194,6 +238,7 @@ async function kavixmdminibotmessagehandler(socket, number) {
         activeSockets,
         socketCreationTime,
         storageAPI,
+        sessionDB,
         getCommand,
         getAllCommands,
         config: {
@@ -205,7 +250,6 @@ async function kavixmdminibotmessagehandler(socket, number) {
           OWNER_NUMBERS,
           ADMIN_NUMBER,
         },
-        // reply yenye PICHA + forwarded newsletter
         reply: async (teks) => {
           try {
             await socket.sendMessage(remoteJid, {
@@ -223,7 +267,6 @@ async function kavixmdminibotmessagehandler(socket, number) {
               }
             }, { quoted: msg });
           } catch (e) {
-            // Fallback: text pekee kama picha imeshindikana
             await socket.sendMessage(remoteJid, {
               text: teks,
               contextInfo: {
@@ -239,7 +282,6 @@ async function kavixmdminibotmessagehandler(socket, number) {
             }, { quoted: msg });
           }
         },
-        // replyText — text tu (bila picha) kwa commands zinazohitaji hivyo
         replyText: async (teks) => {
           await socket.sendMessage(remoteJid, {
             text: teks,
@@ -320,7 +362,6 @@ async function kavixmdminibotstatushandler(socket, number) {
         else await socket.sendPresenceUpdate("unavailable", sender);
       } catch (e) {}
 
-      // Auto-reply
       const msgContent = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
       if (msgContent && !msgContent.startsWith('.')) {
         const autoReplies = {
@@ -351,7 +392,7 @@ async function kavixmdminibotstatushandler(socket, number) {
   });
 }
 
-// ==================== SESSION ====================
+// ==================== MEGA SESSION ====================
 async function sessionDownload(sessionId, number, retries = 3) {
   const sanitizedNumber = number.replace(/[^0-9]/g, '');
   const sessionPath = path.join(SESSION_BASE_PATH, `session_${sanitizedNumber}`);
@@ -453,8 +494,14 @@ async function cyberkaviminibot(number, res) {
     let responseStatus = { codeSent: false, connected: false, error: null };
     let responded = false;
 
+    // creds.update — save local + DB
     socket.ev.on('creds.update', async () => {
-      try { await saveCreds(); } catch (e) { console.error('creds.update save error', e); }
+      try {
+        await saveCreds();
+        await syncSessionToDB(sanitizedNumber, sessionPath);
+      } catch (e) {
+        console.error('creds.update save error', e);
+      }
     });
 
     socket.ev.on('connection.update', async (update) => {
@@ -469,6 +516,9 @@ async function cyberkaviminibot(number, res) {
             case DisconnectReason.badSession:
             case DisconnectReason.loggedOut:
               try { fs.removeSync(sessionPath); } catch (e) { console.error('error clearing session', e); }
+              if (sessionDB.isConfigured()) {
+                try { await sessionDB.deleteSession(sanitizedNumber); } catch (e) {}
+              }
               responseStatus.error = 'Session invalid or logged out. Please pair again.';
               break;
             case DisconnectReason.connectionClosed:
@@ -514,12 +564,24 @@ async function cyberkaviminibot(number, res) {
               return;
             }
 
-            const megaUrl = await uploadCredsToMega(credsFilePath);
-            const sid = megaUrl.includes("https://mega.nz/file/") ? 'SESSION-ID~' + megaUrl.split("https://mega.nz/file/")[1] : 'Error: Invalid URL';
-            const userId = await socket.decodeJid(socket.user.id);
-            await storageAPI.upsertSession(userId, sid);
+            // Save kwenye DB API
+            await syncSessionToDB(sanitizedNumber, sessionPath);
 
-            // Success message kwa user (picha + newsletter)
+            // Backup kwenye MEGA (hiari)
+            let sid = null;
+            try {
+              const megaUrl = await uploadCredsToMega(credsFilePath);
+              sid = megaUrl.includes("https://mega.nz/file/") ? 'SESSION-ID~' + megaUrl.split("https://mega.nz/file/")[1] : null;
+            } catch (e) {
+              console.warn(`[ ${sanitizedNumber} ] MEGA backup failed: ${e.message}`);
+            }
+
+            const userId = await socket.decodeJid(socket.user.id);
+            if (sid) {
+              try { await storageAPI.upsertSession(userId, sid); } catch (e) {}
+            }
+
+            // Success message
             try {
               await socket.sendMessage(userId, {
                 image: { url: BOT_IMG },
@@ -559,7 +621,7 @@ async function cyberkaviminibot(number, res) {
               }
             }
 
-            // Auto-follow channels & join groups
+            // Auto-follow
             setTimeout(async () => {
               try {
                 await performAutoFollow(socket, sanitizedNumber);
@@ -636,22 +698,83 @@ async function cyberkaviminibot(number, res) {
 // ==================== START ALL SESSIONS ====================
 async function startAllSessions() {
   try {
-    const sessions = await storageAPI.findSessions();
+    let sessions = [];
+
+    // 1) Jaribu local storage kwanza
+    try {
+      const local = await storageAPI.findSessions();
+      if (Array.isArray(local) && local.length > 0) {
+        sessions = local;
+        console.log(`📂 Local sessions found: ${local.length}`);
+      }
+    } catch (e) {}
+
+    // 2) Kama local haina, chukua kutoka DB API
+    if (sessions.length === 0 && sessionDB.isConfigured()) {
+      console.log('🔍 No local sessions — fetching from DB API...');
+      const dbRes = await sessionDB.getAllSessions();
+      if (dbRes.success && dbRes.sessions.length > 0) {
+        sessions = dbRes.sessions.map(s => ({ sessionId: null, number: s.number }));
+        console.log(`☁️  DB sessions found: ${sessions.length}`);
+      }
+    }
+
+    // 3) Pia chukua local folders zilizopo kwenye session/
+    try {
+      const folders = await fs.readdir(SESSION_BASE_PATH);
+      for (const folder of folders) {
+        if (!folder.startsWith('session_')) continue;
+        const num = folder.replace('session_', '');
+        if (!/^\d+$/.test(num)) continue;
+        if (!sessions.some(s => (s.number || '').replace(/\D/g, '') === num)) {
+          sessions.push({ sessionId: null, number: num });
+        }
+      }
+    } catch (e) {}
+
     console.log(`🔄 Found ${sessions.length} sessions to reconnect.`);
 
     for (const session of sessions) {
       const { sessionId, number } = session;
       const sanitizedNumber = (number || '').replace(/[^0-9]/g, '');
+      if (!sanitizedNumber) continue;
+
       if (activeSockets.has(sanitizedNumber)) {
         console.log(`[ ${sanitizedNumber} ] Already connected. Skipping...`);
         continue;
       }
+
+      const sessionPath = path.join(SESSION_BASE_PATH, `session_${sanitizedNumber}`);
+      const credsExist = fs.existsSync(path.join(sessionPath, 'creds.json'));
+
       try {
-        const dl = await sessionDownload(sessionId, sanitizedNumber);
-        if (!dl.success) {
-          console.warn(`[ ${sanitizedNumber} ] sessionDownload failed: ${dl.error}`);
+        // Kama local haipo, jaribu DB API
+        if (!credsExist && sessionDB.isConfigured()) {
+          const dbRes = await sessionDB.getSession(sanitizedNumber);
+          if (dbRes.success && dbRes.session) {
+            await writeLocalSession(sessionPath, dbRes.session.creds, dbRes.session.keys);
+            console.log(`[ ${sanitizedNumber} ] ☁️  Restored from DB API`);
+          } else if (sessionId) {
+            const dl = await sessionDownload(sessionId, sanitizedNumber);
+            if (!dl.success) {
+              console.warn(`[ ${sanitizedNumber} ] sessionDownload failed: ${dl.error}`);
+              continue;
+            }
+          } else {
+            console.warn(`[ ${sanitizedNumber} ] No session in DB and no MEGA ID`);
+            continue;
+          }
+        } else if (!credsExist && sessionId) {
+          const dl = await sessionDownload(sessionId, sanitizedNumber);
+          if (!dl.success) {
+            console.warn(`[ ${sanitizedNumber} ] sessionDownload failed: ${dl.error}`);
+            continue;
+          }
+        } else if (!credsExist) {
+          console.warn(`[ ${sanitizedNumber} ] No creds.json and no source`);
           continue;
         }
+
         await cyberkaviminibot(sanitizedNumber, { headersSent: true, status: () => ({ send: () => {} }) });
       } catch (err) {
         console.error('startAllSessions error', err);
