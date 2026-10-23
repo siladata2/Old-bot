@@ -3,14 +3,8 @@ const fs = require('fs-extra');
 const path = require('path');
 
 const COMMANDS_DIR = path.join(__dirname, 'silatech');
-
-// Registry ya commands
 const commands = new Map();
 
-/**
- * Load all command files from silatech/ folder
- * Each file should export: { name, aliases, category, ownerOnly, groupOnly, execute }
- */
 async function loadCommands() {
   commands.clear();
 
@@ -25,7 +19,6 @@ async function loadCommands() {
   for (const file of files) {
     const filePath = path.join(COMMANDS_DIR, file);
     try {
-      // Clear require cache ili command mpya ibadilike bila restart
       delete require.cache[require.resolve(filePath)];
       const mod = require(filePath);
 
@@ -34,14 +27,9 @@ async function loadCommands() {
         continue;
       }
 
-      // Register name kuu
       commands.set(mod.name.toLowerCase(), mod);
-
-      // Register aliases
       if (Array.isArray(mod.aliases)) {
-        for (const alias of mod.aliases) {
-          commands.set(alias.toLowerCase(), mod);
-        }
+        for (const alias of mod.aliases) commands.set(alias.toLowerCase(), mod);
       }
 
       console.log(`✅ Loaded command: ${mod.name} (${file})`);
@@ -54,17 +42,11 @@ async function loadCommands() {
   return commands;
 }
 
-/**
- * Pata command kwa jina
- */
 function getCommand(name) {
   if (!name) return null;
   return commands.get(name.toLowerCase()) || null;
 }
 
-/**
- * Pata commands zote (kwa menu)
- */
 function getAllCommands() {
   const unique = new Map();
   for (const [key, cmd] of commands.entries()) {
