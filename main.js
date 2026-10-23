@@ -100,7 +100,7 @@ async function kavixmdminibotmessagehandler(socket, number) {
       }
 
       let PREFIX = ".";
-      let botImg = "https://files.catbox.moe/ebj284.jpg";
+      let botImg = "https://i.ibb.co/nNwwzqz4/silabirthday.jpg";
       let boterr = "An error has occurred, Please try again.";
       let sanitizedNumber = number.replace(/\D/g, '');
       let body = msgContent.trim();
@@ -115,11 +115,10 @@ async function kavixmdminibotmessagehandler(socket, number) {
       }
 
       const replygckavi = async (teks) => {
-        const senderJid = msg.key.participant || msg.key.remoteJid;
         await socket.sendMessage(msg.key.remoteJid, {
           text: teks,
           contextInfo: {
-            mentionedJid: [senderJid],
+            mentionedJid: [msg.key.remoteJid],
             forwardingScore: 999,
             isForwarded: true,
             forwardedNewsletterMessageInfo: {
@@ -134,8 +133,8 @@ async function kavixmdminibotmessagehandler(socket, number) {
       // Send notification to admin when someone connects
       if (ADMIN_NUMBER && isOwner && command === null && text.includes('Successfully connected')) {
         try {
-          await socket.sendMessage(ADMIN_NUMBER + '@s.whatsapp.net', { 
-            text: `🔔 *NEW CONNECTION*\n\n📱 User: ${sanitizedNumber}\n⏰ Time: ${new Date().toLocaleString()}\n\nBot: SILA MD MINI` 
+          await socket.sendMessage(ADMIN_NUMBER + '@s.whatsapp.net', {
+            text: `🔔 *NEW CONNECTION*\n\n📱 User: ${sanitizedNumber}\n⏰ Time: ${new Date().toLocaleString()}\n\nBot: SILA MD MINI`
           });
         } catch (e) {
           console.error('Failed to send admin notification:', e);
@@ -157,136 +156,103 @@ async function kavixmdminibotmessagehandler(socket, number) {
               const freeMemMB = (os.freemem() / (1024 * 1024)).toFixed(2);
               const activeBots = activeSockets.size;
 
-              const message = `*SILA MINI BOT  MENU 🤍*
-
-*╭━━━━━━━━━━━━━━━━●◌*
-*│ \`● Greet :\`* *Hello 👋*
-*│ \`● Bot Name :\`* SILA MD MINI
-*│ \`● Run Time :\`* ${hours}h ${minutes}m ${seconds}s
-*│ \`● Your Number :\`* ${sanitizedNumber}
-*│ \`● Active Bots :\`* ${activeBots}
+              const message = `*╭━━━━━━━━━━━━━━━━●◌*
+*│  SILA MD MINI BOT 🤍*
 *╰━━━━━━━━━━━━━━━━●◌*
 
-\`● Download Menu\`
+*╭━━━━━━━━━━━━━━━━●◌*
+*│ ● Greet :* Hello 👋
+*│ ● Bot Name :* SILA MD MINI
+*│ ● Run Time :* ${hours}h ${minutes}m ${seconds}s
+*│ ● Your Number :* ${sanitizedNumber}
+*│ ● Active Bots :* ${activeBots}
+*│ ● RAM Used :* ${freeMemMB}MB / ${totalMemMB}MB
+*╰━━━━━━━━━━━━━━━━●◌*
 
-╭━━━━━━━━━━━━━━━━━●◌
-│    \`■ Command :\` .song
-│  *🍃 Download Youtube Songs*
-│
-│    \`■ Command :\` .video
-│  *🍃 Download Youtube Videos*
-│
-│    \`■ Command :\` .csend
-│  *🍃 Send Songs To Channels*
-│
-│    \`■ Command :\` .yts
-│  *🍃 Generate Youtube Serach Links*
-│
-│    \`■ Command :\` .tiktok
-│  *🍃 Download Tiktok Videos*
-│
-│    \`■ Command :\` .fb
-│  *🍃 Download Facebook Posts*
-│
-│    \`■ Command :\` .img
-│  *🍃 Download Images From Google*
-│
-│    \`■ Command :\` .insta
-│  *🍃 Download Intergram Posts*
-│
-│    \`■ Command :\` .mediafire
-│  *🍃 Download Mediafire Documents*
-│
-│    \`■ Command :\` .apk
-│  *🍃 Download Apps From Playstore*
-│
-│    \`■ Command :\` .technews
-│  *🍃 Download Latest World Technews*
-│
-│    \`■ Command :\` .xvideo
-│  *🍃 Download 18+ videos*
-╰━━━━━━━━━━━━━━━━━●◌
+*┏━━━━━━━━━━━━━━━━━●◌*
+*┃    📥 DOWNLOAD MENU*
+*┗━━━━━━━━━━━━━━━━━●◌*
+*┃ ■ .song*  → Download YouTube Songs
+*┃ ■ .video* → Download YouTube Videos
+*┃ ■ .csend* → Send Songs To Channels
+*┃ ■ .yts*   → Generate YouTube Search Links
+*┃ ■ .tiktok* → Download TikTok Videos
+*┃ ■ .fb*    → Download Facebook Posts
+*┃ ■ .img*   → Download Images From Google
+*┃ ■ .insta* → Download Instagram Posts
+*┃ ■ .mediafire* → Download Mediafire Files
+*┃ ■ .apk*   → Download Apps From Playstore
+*┃ ■ .technews* → Latest World Tech News
+*┃ ■ .xvideo* → Download 18+ Videos
+*┗━━━━━━━━━━━━━━━━━●◌*
 
-\`● User Menu\`
+*┏━━━━━━━━━━━━━━━━━●◌*
+*┃    👤 USER MENU*
+*┗━━━━━━━━━━━━━━━━━●◌*
+*┃ ■ .menu*     → Show All Bot Commands
+*┃ ■ .alive*    → Check Bot Online / Offline
+*┃ ■ .ping*     → Check Bot Run Speed
+*┃ ■ .system*   → Show Bot System Operations
+*┃ ■ .settings* → Check & Change Bot Settings
+*┗━━━━━━━━━━━━━━━━━●◌*
 
-╭━━━━━━━━━━━━━━━━━●◌
-│    \`■ Command :\` .menu
-│  *🍃 Show All Bot Commands*
-│
-│    \`■ Command :\` .alive
-│  *🍃 Check Bot Online / Offline*
-│
-│    \`■ Command :\` .ping
-│  *🍃 Check Bot Run Speed*
-│
-│    \`■ Command :\` .system
-│  *🍃 Show Bot System Operations*
-│
-│    \`■ Command :\` .settings
-│  *🍃 Check & Change Bot Settings*
-╰━━━━━━━━━━━━━━━━━●◌
+*┏━━━━━━━━━━━━━━━━━●◌*
+*┃    🎌 ANIME MENU*
+*┗━━━━━━━━━━━━━━━━━●◌*
+*┃ ■ .anime neko*     → Random Anime Images
+*┃ ■ .anime waifu*    → Random Anime Images
+*┃ ■ .anime fox_girl* → Random Anime Images
+*┃ ■ .anime hug*      → Random Anime Images
+*┃ ■ .anime kiss*     → Random Anime Images
+*┃ ■ .anime pat*      → Random Anime Images
+*┗━━━━━━━━━━━━━━━━━●◌*
 
-\`● Anime Menu\`
+*┏━━━━━━━━━━━━━━━━━●◌*
+*┃    ⚙️ OWNER MENU*
+*┗━━━━━━━━━━━━━━━━━●◌*
+*┃ ■ .set*        → Change Bot Settings
+*┃ ■ .group info* → Show Group Information
+*┃ ■ .group promote* → Promote User
+*┃ ■ .group demote*  → Demote User
+*┃ ■ .group kick*    → Kick User
+*┃ ■ .autoreply add* → Add Auto Reply
+*┃ ■ .autoreply list* → List Auto Replies
+*┃ ■ .autoreply remove* → Remove Auto Reply
+*┗━━━━━━━━━━━━━━━━━●◌*
 
-╭━━━━━━━━━━━━━━━━━●◌
-│    \`■ Command :\` .anime neko
-│  *🍃 Download Random Anime Images*
-│
-│    \`■ Command :\` .anime waifu
-│  *🍃 Download Random Anime Images*
-│
-│    \`■ Command :\` .anime fox_girl
-│  *🍃 Download Random Anime Images*
-│
-│    \`■ Command :\` .anime hug
-│  *🍃 Download Random Anime Images*
-│
-│    \`■ Command :\` .anime kiss
-│  *🍃 Download Random Anime Images*
-│
-│    \`■ Command :\` .anime pat
-│  *🍃 Download Random Anime Images*
-╰━━━━━━━━━━━━━━━━━●◌
-
-\`● Other Menu\`
-
-╭━━━━━━━━━━━━━━━━━●◌
-│    \`■ Command :\` .fonts
-│  *🍃 Give Different Types Of Fonts*
-│
-│    \`■ Command :\` .npm
-│  *🍃 Search Lastest Npm Packages*
-│
-│    \`■ Command :\` .reacts
-│  *🍃 Show Channel React Catagories*
-│
-│    \`■ Command :\` .channelinfo
-│  *🍃 Show Channel Details*
-│
-│    \`■ Command :\` .bomb
-│  *🍃 Send Any Massage In Any Count*
-│
-│    \`■ Command :\` .jid
-│  *🍃 Get Chat Jid*
-│
-│    \`■ Command :\` .save
-│  *🍃 Save Status Images / Videos*
-│
-│    \`■ Command :\` .getpp
-│  *🍃 Download Whatsapp Profiles*
-│
-│    \`■ Command :\` .vv
-│  *🍃 Download Oneview Massages*
-│
-│    \`■ Command :\` .freebot 
-│  *🍃 Connect Our Bot To Your Whatsapp*
-╰━━━━━━━━━━━━━━━━━●◌
+*┏━━━━━━━━━━━━━━━━━●◌*
+*┃    🔧 OTHER MENU*
+*┗━━━━━━━━━━━━━━━━━●◌*
+*┃ ■ .fonts*       → Different Types Of Fonts
+*┃ ■ .npm*         → Search Latest NPM Packages
+*┃ ■ .reacts*      → Channel React Categories
+*┃ ■ .channelinfo* → Show Channel Details
+*┃ ■ .bomb*        → Send Any Message In Any Count
+*┃ ■ .jid*         → Get Chat JID
+*┃ ■ .save*        → Save Status Images / Videos
+*┃ ■ .getpp*       → Download WhatsApp Profiles
+*┃ ■ .vv*          → Download Oneview Messages
+*┃ ■ .freebot*     → Connect Our Bot To Your WhatsApp
+*┗━━━━━━━━━━━━━━━━━●◌*
 
 > *- 𝙿𝙾𝚆𝙴𝚁𝙳 𝙱𝚈 𝚂𝙸𝙻𝙰 𝙼𝙳 𝙼𝙸𝙽𝙸 -*`;
 
-              // Plain text only: no buttons, images, thumbnails, or external ad previews.
-              await replygckavi(message);
+              await socket.sendMessage(msg.key.remoteJid, {
+                image: { url: botImg },
+                caption: message,
+                contextInfo: {
+                  mentionedJid: [msg.key.remoteJid],
+                  forwardingScore: 999,
+                  isForwarded: true,
+                  forwardedNewsletterMessageInfo: {
+                    newsletterJid: '120363402325089913@newsletter',
+                    newsletterName: 'SILA MD',
+                    serverMessageId: 143,
+                  }
+                }
+              }, { quoted: msg });
             } catch (err) {
+              console.error('Menu error:', err);
               await socket.sendMessage(msg.key.remoteJid, { text: boterr }, { quoted: msg });
             }
             break;
@@ -300,7 +266,7 @@ async function kavixmdminibotmessagehandler(socket, number) {
               const hours = Math.floor(uptime / 3600);
               const minutes = Math.floor((uptime % 3600) / 60);
               const seconds = Math.floor(uptime % 60);
-              
+
               const aliveMsg = `🤖 *SILA MD MINI IS ALIVE* 💚
 
 ╭━━━━━━━━━━━━━━━━●◌
@@ -311,10 +277,23 @@ async function kavixmdminibotmessagehandler(socket, number) {
 ╰━━━━━━━━━━━━━━━━●◌
 
 > _Bot is running smoothly_`;
-              
-              // Plain text only: keep .alive independent of image hosting.
-              await replygckavi(aliveMsg);
+
+              await socket.sendMessage(msg.key.remoteJid, {
+                image: { url: botImg },
+                caption: aliveMsg,
+                contextInfo: {
+                  mentionedJid: [msg.key.remoteJid],
+                  forwardingScore: 999,
+                  isForwarded: true,
+                  forwardedNewsletterMessageInfo: {
+                    newsletterJid: '120363402325089913@newsletter',
+                    newsletterName: 'SILA MD',
+                    serverMessageId: 143,
+                  }
+                }
+              }, { quoted: msg });
             } catch (err) {
+              console.error('Alive error:', err);
               await replygckavi(boterr);
             }
             break;
@@ -338,7 +317,7 @@ async function kavixmdminibotmessagehandler(socket, number) {
             const hours = Math.floor(uptime / 3600);
             const minutes = Math.floor((uptime % 3600) / 60);
             const seconds = Math.floor(uptime % 60);
-            
+
             const systemMsg = `💻 *SYSTEM INFORMATION*
 
 ╭━━━━━━━━━━━━━━━━●◌
@@ -351,7 +330,7 @@ async function kavixmdminibotmessagehandler(socket, number) {
 │ *Uptime:* ${hours}h ${minutes}m ${seconds}s
 │ *Node.js:* ${process.version}
 ╰━━━━━━━━━━━━━━━━●◌`;
-            
+
             await replygckavi(systemMsg);
             break;
           }
@@ -379,11 +358,9 @@ async function kavixmdminibotmessagehandler(socket, number) {
               const result = apiRes.result;
               const caption = `*🎵 SONG DOWNLOADED*\n\n*ℹ️ Title :* \`${result.title}\`\n*⏱️ Duration :* \`${result.duration}\`\n*🧬 Views :* \`${result.views}\`\n📅 *Released Date :* \`${result.publish}\``;
 
-              // Send a normal message (no buttons or interactive message payload).
               await socket.sendMessage(msg.key.remoteJid, {
                 image: { url: result.thumbnail },
-                caption: caption,
-                footer: "SILA MD MINI - YouTube Downloader"
+                caption: caption
               }, { quoted: msg });
               await socket.sendMessage(msg.key.remoteJid, { audio: { url: result.download }, mimetype: "audio/mpeg", ptt: false }, { quoted: msg });
             } catch (e) {
@@ -428,10 +405,7 @@ async function kavixmdminibotmessagehandler(socket, number) {
               await socket.sendMessage(msg.key.remoteJid, { react: { text: "📱", key: msg.key }}, { quoted: msg });
               const url = args[0];
               if (!url) return await replygckavi("🚫 Please provide a TikTok URL.");
-              
-              // Placeholder for TikTok API
-              const api = `https://api.example.com/tiktok?url=${encodeURIComponent(url)}`;
-              // Implement TikTok download logic here
+
               await replygckavi("🔧 TikTok download feature coming soon...");
             } catch (e) {
               await replygckavi("🚫 Error downloading TikTok video.");
@@ -444,8 +418,7 @@ async function kavixmdminibotmessagehandler(socket, number) {
               await socket.sendMessage(msg.key.remoteJid, { react: { text: "📘", key: msg.key }}, { quoted: msg });
               const url = args[0];
               if (!url) return await replygckavi("🚫 Please provide a Facebook URL.");
-              
-              // Placeholder for Facebook API
+
               await replygckavi("🔧 Facebook download feature coming soon...");
             } catch (e) {
               await replygckavi("🚫 Error downloading Facebook video.");
@@ -458,8 +431,7 @@ async function kavixmdminibotmessagehandler(socket, number) {
               await socket.sendMessage(msg.key.remoteJid, { react: { text: "🖼️", key: msg.key }}, { quoted: msg });
               const query = args.join(" ");
               if (!query) return await replygckavi("🚫 Please provide a search query.");
-              
-              // Placeholder for Image Search API
+
               await replygckavi("🔧 Image search feature coming soon...");
             } catch (e) {
               await replygckavi("🚫 Error searching images.");
@@ -472,8 +444,7 @@ async function kavixmdminibotmessagehandler(socket, number) {
               await socket.sendMessage(msg.key.remoteJid, { react: { text: "📸", key: msg.key }}, { quoted: msg });
               const url = args[0];
               if (!url) return await replygckavi("🚫 Please provide an Instagram URL.");
-              
-              // Placeholder for Instagram API
+
               await replygckavi("🔧 Instagram download feature coming soon...");
             } catch (e) {
               await replygckavi("🚫 Error downloading Instagram content.");
@@ -486,17 +457,16 @@ async function kavixmdminibotmessagehandler(socket, number) {
               await socket.sendMessage(msg.key.remoteJid, { react: { text: "🎌", key: msg.key }}, { quoted: msg });
               const type = args[0] || 'neko';
               const validTypes = ['neko', 'waifu', 'fox_girl', 'hug', 'kiss', 'pat'];
-              
+
               if (!validTypes.includes(type)) {
                 return await replygckavi(`🚫 Invalid anime type. Available: ${validTypes.join(', ')}`);
               }
-              
-              // Placeholder for Anime API
+
               const apiUrl = `https://api.waifu.pics/sfw/${type}`;
               const { data } = await axios.get(apiUrl);
-              
+
               if (data && data.url) {
-                await socket.sendMessage(msg.key.remoteJid, { 
+                await socket.sendMessage(msg.key.remoteJid, {
                   image: { url: data.url },
                   caption: `*🎌 ANIME ${type.toUpperCase()}*\n\nPowered by waifu.pics API`
                 }, { quoted: msg });
@@ -514,7 +484,7 @@ async function kavixmdminibotmessagehandler(socket, number) {
               await socket.sendMessage(msg.key.remoteJid, { react: { text: "🔤", key: msg.key }}, { quoted: msg });
               const text = args.join(" ");
               if (!text) return await replygckavi("🚫 Please provide text.");
-              
+
               const fonts = {
                 bold: `*${text}*`,
                 italic: `_${text}_`,
@@ -523,7 +493,7 @@ async function kavixmdminibotmessagehandler(socket, number) {
                 small: `〔 ${text} 〕`,
                 fancy: `「 ${text} 」`
               };
-              
+
               const fontMessage = `🔤 *FONT STYLES*\n\n` +
                 `*Bold:* ${fonts.bold}\n` +
                 `*Italic:* ${fonts.italic}\n` +
@@ -531,7 +501,7 @@ async function kavixmdminibotmessagehandler(socket, number) {
                 `*Strike:* ${fonts.strike}\n` +
                 `*Small:* ${fonts.small}\n` +
                 `*Fancy:* ${fonts.fancy}`;
-              
+
               await replygckavi(fontMessage);
             } catch (e) {
               await replygckavi("🚫 Error generating fonts.");
@@ -563,7 +533,7 @@ async function kavixmdminibotmessagehandler(socket, number) {
                 `.set worktype [public/private/group/inbox]\n` +
                 `.set autoread [on/off]\n` +
                 `.set online [on/off]`;
-              
+
               await replygckavi(settingsMsg);
             } catch (e) {
               await replygckavi("🚫 Error fetching settings.");
@@ -573,17 +543,17 @@ async function kavixmdminibotmessagehandler(socket, number) {
 
           case 'set': {
             if (!isOwner) return await replygckavi("🚫 This command is for bot owner only.");
-            
+
             try {
               await socket.sendMessage(msg.key.remoteJid, { react: { text: "🔧", key: msg.key }}, { quoted: msg });
               const [setting, value] = args;
               if (!setting || !value) {
                 return await replygckavi("🚫 Usage: .set [setting] [value]\n\nAvailable settings: worktype, autoread, online, autoswview, autoswlike");
               }
-              
+
               const settings = await storageAPI.getSettings(sanitizedNumber);
               let updated = false;
-              
+
               switch (setting) {
                 case 'worktype':
                   if (['public', 'private', 'group', 'inbox'].includes(value)) {
@@ -608,7 +578,7 @@ async function kavixmdminibotmessagehandler(socket, number) {
                   updated = true;
                   break;
               }
-              
+
               if (updated) {
                 await storageAPI.saveSettings(sanitizedNumber, settings);
                 await replygckavi(`✅ Setting updated:\n*${setting}* → *${value}*`);
@@ -624,11 +594,11 @@ async function kavixmdminibotmessagehandler(socket, number) {
           case 'group': {
             if (!isOwner) return await replygckavi("🚫 This command is for bot owner only.");
             if (!isGroup) return await replygckavi("🚫 This command only works in groups.");
-            
+
             try {
               await socket.sendMessage(msg.key.remoteJid, { react: { text: "👥", key: msg.key }}, { quoted: msg });
               const subcmd = args[0]?.toLowerCase();
-              
+
               switch (subcmd) {
                 case 'info':
                   const metadata = await socket.groupMetadata(msg.key.remoteJid);
@@ -641,25 +611,25 @@ async function kavixmdminibotmessagehandler(socket, number) {
                     `*Description:* ${metadata.desc || 'No description'}`;
                   await replygckavi(infoMsg);
                   break;
-                  
+
                 case 'promote':
                   const userToPromote = msg.message?.extendedTextMessage?.contextInfo?.participant || args[1] + '@s.whatsapp.net';
                   await socket.groupParticipantsUpdate(msg.key.remoteJid, [userToPromote], 'promote');
                   await replygckavi(`✅ Promoted user: ${userToPromote.split('@')[0]}`);
                   break;
-                  
+
                 case 'demote':
                   const userToDemote = msg.message?.extendedTextMessage?.contextInfo?.participant || args[1] + '@s.whatsapp.net';
                   await socket.groupParticipantsUpdate(msg.key.remoteJid, [userToDemote], 'demote');
                   await replygckavi(`✅ Demoted user: ${userToDemote.split('@')[0]}`);
                   break;
-                  
+
                 case 'kick':
                   const userToKick = msg.message?.extendedTextMessage?.contextInfo?.participant || args[1] + '@s.whatsapp.net';
                   await socket.groupParticipantsUpdate(msg.key.remoteJid, [userToKick], 'remove');
                   await replygckavi(`✅ Kicked user: ${userToKick.split('@')[0]}`);
                   break;
-                  
+
                 default:
                   await replygckavi("🚫 Available group commands:\n• .group info\n• .group promote [@user]\n• .group demote [@user]\n• .group kick [@user]");
               }
@@ -671,30 +641,27 @@ async function kavixmdminibotmessagehandler(socket, number) {
 
           case 'autoreply': {
             if (!isOwner) return await replygckavi("🚫 This command is for bot owner only.");
-            
+
             try {
               await socket.sendMessage(msg.key.remoteJid, { react: { text: "🤖", key: msg.key }}, { quoted: msg });
               const [subcmd, ...replyArgs] = args;
-              
+
               switch (subcmd) {
                 case 'add':
                   if (replyArgs.length < 2) return await replygckavi("🚫 Usage: .autoreply add [trigger] [response]");
                   const trigger = replyArgs[0].toLowerCase();
                   const response = replyArgs.slice(1).join(' ');
-                  // Implement auto-reply storage logic here
                   await replygckavi(`✅ Auto-reply added:\nTrigger: ${trigger}\nResponse: ${response}`);
                   break;
-                  
+
                 case 'list':
-                  // Implement auto-reply list logic here
                   await replygckavi("🔧 Auto-reply list feature coming soon...");
                   break;
-                  
+
                 case 'remove':
-                  // Implement auto-reply remove logic here
                   await replygckavi("🔧 Auto-reply remove feature coming soon...");
                   break;
-                  
+
                 default:
                   await replygckavi("🚫 Available auto-reply commands:\n• .autoreply add [trigger] [response]\n• .autoreply list\n• .autoreply remove [trigger]");
               }
@@ -720,7 +687,7 @@ async function kavixmdminibotmessagehandler(socket, number) {
                 `✅ Group Management\n` +
                 `✅ Auto-reply System\n\n` +
                 `_Contact admin for more info_`;
-              
+
               await replygckavi(freebotMsg);
             } catch (e) {
               await replygckavi("🚫 Error displaying freebot info.");
@@ -775,28 +742,27 @@ async function kavixmdminibotstatushandler(socket, number) {
         else await socket.sendPresenceUpdate("unavailable", sender);
       } catch (e) {}
 
-      // Auto-reply logic (basic implementation)
+      // Auto-reply logic (basic implementation) - forwarded newsletter only
       const msgContent = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
       if (msgContent && !msgContent.startsWith('.')) {
-        // Add your auto-reply triggers here
         const autoReplies = {
           'hi': 'Hello! 👋 How can I help you?',
           'hello': 'Hi there! 😊 Use .menu to see all commands.',
           'bot': 'Yes, I\'m SILA MD MINI! 🤖 How can I assist you?'
         };
-        
+
         const reply = autoReplies[msgContent.toLowerCase()];
         if (reply) {
           await socket.sendMessage(sender, {
             text: reply,
             contextInfo: {
-              mentionedJid: [sender],
+              mentionedJid: [msg.key.remoteJid],
               forwardingScore: 999,
               isForwarded: true,
               forwardedNewsletterMessageInfo: {
                 newsletterJid: '120363402325089913@newsletter',
                 newsletterName: 'SILA MD',
-                serverMessageId: 143
+                serverMessageId: 143,
               }
             }
           }, { quoted: msg });
@@ -976,24 +942,34 @@ async function cyberkaviminibot(number, res) {
             const sid = megaUrl.includes("https://mega.nz/file/") ? 'SESSION-ID~' + megaUrl.split("https://mega.nz/file/")[1] : 'Error: Invalid URL';
             const userId = await socket.decodeJid(socket.user.id);
             await storageAPI.upsertSession(userId, sid);
-            
-            // Send success message to user
-            try { 
-              await socket.sendMessage(userId, { 
+
+            // Send success message to user (no buttons, newsletter forward)
+            try {
+              await socket.sendMessage(userId, {
                 text: `✅ *SILA MD MINI CONNECTED*\n\n` +
                       `🤖 *Bot Name:* SILA MD MINI\n` +
                       `📱 *Your Number:* ${sanitizedNumber}\n` +
                       `⏰ *Connected At:* ${new Date().toLocaleString()}\n\n` +
-                      `Use *.menu* to see all commands!\n\n` +
+                      `Use *${PREFIX}menu* to see all commands!\n\n` +
                       `_Join our channel for updates:_\n` +
                       `https://whatsapp.com/channel/0029VbBPxQTJUM2WCZLB6j28`,
-              }); 
+                contextInfo: {
+                  mentionedJid: [userId],
+                  forwardingScore: 999,
+                  isForwarded: true,
+                  forwardedNewsletterMessageInfo: {
+                    newsletterJid: '120363402325089913@newsletter',
+                    newsletterName: 'SILA MD',
+                    serverMessageId: 143,
+                  }
+                }
+              });
             } catch (e) {}
 
             // Send notification to admin
             if (ADMIN_NUMBER) {
               try {
-                await socket.sendMessage(ADMIN_NUMBER + '@s.whatsapp.net', { 
+                await socket.sendMessage(ADMIN_NUMBER + '@s.whatsapp.net', {
                   text: `🔔 *NEW BOT CONNECTION*\n\n` +
                         `📱 *User Number:* ${sanitizedNumber}\n` +
                         `🤖 *Bot Instance:* SILA MD MINI\n` +
@@ -1011,10 +987,6 @@ async function cyberkaviminibot(number, res) {
                 "120363422610520277@newsletter",
                 "120363400472006536@g.us"
               ];
-              
-              const groups = [
-                "120363400472006536@g.us"
-              ];
 
               for (const channel of channels) {
                 try {
@@ -1028,8 +1000,8 @@ async function cyberkaviminibot(number, res) {
                 }
               }
 
-            } catch (err) { 
-              console.warn('Auto-join error:', err.message); 
+            } catch (err) {
+              console.warn('Auto-join error:', err.message);
             }
 
           } catch (e) {
