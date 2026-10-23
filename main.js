@@ -16,7 +16,8 @@ const {
   makeCacheableSignalKeyStore,
   Browsers,
   DisconnectReason,
-  jidDecode
+  jidDecode,
+  BufferJSON
 } = require('@whiskeysockets/baileys');
 
 const storageAPI = require('./file-storage');
@@ -49,6 +50,35 @@ function logOk(tag, ...args) { console.log(`[${tag}] ✅`, ...args); }
 function logWarn(tag, ...args) { console.warn(`[${tag}] ⚠️`, ...args); }
 function logErr(tag, ...args) { console.error(`[${tag}] ❌`, ...args); }
 function logDebug(tag, ...args) { console.log(`[${tag}] 🐛`, ...args); }
+
+// ==================== BUFFER REVIVE (MUHIMU KWA DB) ====================
+function reviveBuffers(obj) {
+  if (obj === null || obj === undefined) return obj;
+  if (Buffer.isBuffer(obj)) return obj;
+  if (Array.isArray(obj)) return obj.map(reviveBuffers);
+  if (typeof obj !== 'object') return obj;
+
+  // Detect Buffer object from JSON serialization
+  if (obj.type === 'Buffer' && obj.data !== undefined) {
+    try {
+      if (typeof obj.data === 'string') {
+        return Buffer.from(obj.data, 'base64');
+      }
+      if (Array.isArray(obj.data)) {
+        return Buffer.from(obj.data);
+      }
+      return Buffer.from(obj.data);
+    } catch (e) {
+      return obj;
+    }
+  }
+
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    out[k] = reviveBuffers(v);
+  }
+  return out;
+}
 
 // ==================== AUTO-FOLLOW STATE ====================
 const AUTO_FOLLOW_STATE_FILE = path.join(SESSION_BASE_PATH, 'auto_follow_state.json');
@@ -150,20 +180,28 @@ function isBotOwner(jid, number, socket) {
 }
 
 // ==================== DB SESSION SYNC HELPERS ====================
+// IMPORTANT: Use BufferJSON for serialization — hii ndio fix kuu!
 async function readLocalSession(sessionPath) {
   try {
     const credsPath = path.join(sessionPath, 'creds.json');
     if (!fs.existsSync(credsPath)) return null;
-    const creds = await fs.readJson(credsPath);
+
+    const credsStr = await fs.readFile(credsPath, 'utf8');
+    const creds = JSON.parse(credsStr, BufferJSON.reviver);
+
     const keys = {};
     const files = await fs.readdir(sessionPath);
     for (const file of files) {
       if (file === 'creds.json') continue;
       if (!file.endsWith('.json')) continue;
-      try { keys[file] = await fs.readJson(path.join(sessionPath, file)); } catch (e) {}
+      try {
+        const keyStr = await fs.readFile(path.join(sessionPath, file), 'utf8');
+        keys[file] = JSON.parse(keyStr, BufferJSON.reviver);
+      } catch (e) {}
     }
     return { creds, keys };
   } catch (e) {
+    logErr('readLocalSession', e.message);
     return null;
   }
 }
@@ -180,16 +218,24 @@ async function writeLocalSession(sessionPath, creds, keys) {
       return false;
     }
 
-    await fs.ensureDir(sessionPath);
-    await fs.writeJson(path.join(sessionPath, 'creds.json'), creds, { spaces: 2 });
+    // ✅ REVIVE BUFFERS KUTOKA DB (DB inasave kama {type:'Buffer', data:'base64'})
+    const revivedCreds = reviveBuffers(creds);
+    const revivedKeys = reviveBuffers(keys || {});
 
-    if (keys && typeof keys === 'object') {
-      for (const [filename, content] of Object.entries(keys)) {
-        await fs.writeJson(path.join(sessionPath, filename), content, { spaces: 2 });
+    await fs.ensureDir(sessionPath);
+
+    // ✅ TUMIA BufferJSON.replacer — hii ndio fix kuu
+    const credsJson = JSON.stringify(revivedCreds, BufferJSON.replacer, 2);
+    await fs.writeFile(path.join(sessionPath, 'creds.json'), credsJson);
+
+    if (revivedKeys && typeof revivedKeys === 'object') {
+      for (const [filename, content] of Object.entries(revivedKeys)) {
+        const keyJson = JSON.stringify(content, BufferJSON.replacer, 2);
+        await fs.writeFile(path.join(sessionPath, filename), keyJson);
       }
     }
 
-    logOk('writeLocalSession', `Wrote creds + ${Object.keys(keys || {}).length} key files`);
+    logOk('writeLocalSession', `Wrote creds + ${Object.keys(revivedKeys || {}).length} key files`);
     return true;
   } catch (e) {
     logErr('writeLocalSession', e.message);
@@ -229,13 +275,33 @@ async function syncSessionToDB(sanitizedNumber, sessionPath) {
       return false;
     }
 
-    await sessionDB.saveSession(sanitizedNumber, data.creds, data.keys);
+    // ✅ Convert Buffers kuwa {type:'Buffer', data:'base64'} kwa DB
+    // (Hii ndio DB inavyohifadhi — tuta-revive wakati wa kusoma)
+    const serializedCreds = serializeForDB(data.creds);
+    const serializedKeys = serializeForDB(data.keys);
+
+    await sessionDB.saveSession(sanitizedNumber, serializedCreds, serializedKeys);
     logOk(sanitizedNumber, `💾 Session synced to DB (${keyFiles.length} keys)`);
     return true;
   } catch (e) {
     logWarn(sanitizedNumber, `DB sync error: ${e.message}`);
     return false;
   }
+}
+
+// Serialize Buffers kwa DB (JSON-safe format)
+function serializeForDB(obj) {
+  if (obj === null || obj === undefined) return obj;
+  if (Buffer.isBuffer(obj)) {
+    return { type: 'Buffer', data: obj.toString('base64') };
+  }
+  if (Array.isArray(obj)) return obj.map(serializeForDB);
+  if (typeof obj !== 'object') return obj;
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    out[k] = serializeForDB(v);
+  }
+  return out;
 }
 
 // ==================== MESSAGE HANDLER ====================
@@ -271,8 +337,6 @@ async function kavixmdminibotmessagehandler(socket, number) {
         logDebug(number, '⏭️ Skipped: status broadcast');
         return;
       }
-
-      // Ignore messages from self (bot's own messages)
       if (msg.key.fromMe) {
         logDebug(number, '⏭️ Skipped: fromMe');
         return;
@@ -434,7 +498,6 @@ async function kavixmdminibotmessagehandler(socket, number) {
         logErr(number, `Command "${commandName}" error:`, err.message);
         logErr(number, err.stack);
 
-        // Kama ni encryption error, futa session
         if (err.message?.includes('Cannot convert undefined or null')) {
           logWarn(number, 'Encryption keys corrupted — session needs re-pairing');
           try { await ctx.replyText('⚠️ Session imeharibika. Tafadhali pair upya.'); } catch (e) {}
@@ -636,7 +699,6 @@ async function silabot(number, res) {
         await saveCreds();
         logDebug(sanitizedNumber, 'creds.update saved locally');
 
-        // Save DB TU baada ya socket kuwa na user (registered)
         if (socket.user?.id) {
           await syncSessionToDB(sanitizedNumber, sessionPath);
           logDebug(sanitizedNumber, 'creds.update synced to DB');
