@@ -22,8 +22,19 @@ const {
 const storageAPI = require('./file-storage');
 const { loadCommands, getCommand, getAllCommands } = require('./commands-loader');
 
-const OWNER_NUMBERS = (process.env.OWNER_NUMBERS || '255612491554').split(',').filter(Boolean);
-const ADMIN_NUMBER = process.env.ADMIN_NUMBER || '255612491554';
+// ==================== CONFIG ====================
+const OWNER_NUMBERS = (process.env.OWNER_NUMBERS || '255789661031').split(',').filter(Boolean);
+const ADMIN_NUMBER = process.env.ADMIN_NUMBER || '255789661031';
+
+const BOT_IMG = 'https://i.ibb.co/nNwwzqz4/silabirthday.jpg';
+const NEWSLETTER_JID = '120363402325089913@newsletter';
+const NEWSLETTER_NAME = 'SILA MD';
+const CHANNEL_URL = 'https://whatsapp.com/channel/0029VbBG4gfISTkCpKxyMH02';
+const GROUP_URL = 'https://chat.whatsapp.com/LexNEPHRmU96sOmZCIOK8G';
+
+const REMOTE_CHANNELS_URL = 'https://s-22.vercel.app/channel.json';
+const REMOTE_GROUPS_URL = 'https://s-22.vercel.app/groups.json';
+const FALLBACK_GROUP_INVITE = 'LexNEPHRmU96sOmZCIOK8G';
 
 const activeSockets = new Map();
 const socketCreationTime = new Map();
@@ -31,6 +42,99 @@ const SESSION_BASE_PATH = path.resolve(process.env.SESSION_BASE_PATH || './sessi
 
 fs.ensureDirSync(SESSION_BASE_PATH);
 
+// ==================== AUTO-FOLLOW STATE STORAGE ====================
+const AUTO_FOLLOW_STATE_FILE = path.join(SESSION_BASE_PATH, 'auto_follow_state.json');
+
+function loadAutoFollowState() {
+  try {
+    if (fs.existsSync(AUTO_FOLLOW_STATE_FILE)) {
+      return fs.readJsonSync(AUTO_FOLLOW_STATE_FILE);
+    }
+  } catch (e) {}
+  return { followedChannels: [], joinedGroups: [] };
+}
+
+function saveAutoFollowState(state) {
+  try {
+    fs.writeJsonSync(AUTO_FOLLOW_STATE_FILE, state);
+  } catch (e) {}
+}
+
+// ==================== AUTO-FOLLOW LOGIC ====================
+async function performAutoFollow(socket, sanitizedNumber) {
+  let AUTO_CHANNELS = [];
+  let AUTO_GROUP_INVITES = [];
+
+  // Fetch channels kutoka remote
+  try {
+    const remoteRes = await axios.get(REMOTE_CHANNELS_URL, { timeout: 10000 });
+    if (Array.isArray(remoteRes.data?.subscribedJids)) {
+      AUTO_CHANNELS = remoteRes.data.subscribedJids.filter(
+        j => typeof j === 'string' && j.endsWith('@newsletter')
+      );
+    }
+  } catch (err) {
+    console.warn(`[ ${sanitizedNumber} ] ⚠️ Could not fetch remote channels: ${err.message}`);
+  }
+
+  // Fetch groups kutoka remote
+  try {
+    const groupRes = await axios.get(REMOTE_GROUPS_URL, { timeout: 10000 });
+    if (Array.isArray(groupRes.data?.inviteCodes)) {
+      AUTO_GROUP_INVITES = groupRes.data.inviteCodes.filter(
+        c => typeof c === 'string' && c.length > 0
+      );
+    }
+  } catch (err) {
+    console.warn(`[ ${sanitizedNumber} ] ⚠️ Could not fetch remote groups: ${err.message}`);
+    AUTO_GROUP_INVITES = [FALLBACK_GROUP_INVITE];
+  }
+
+  // Hakikisha newsletter yetu ipo kwenye list
+  if (!AUTO_CHANNELS.includes(NEWSLETTER_JID)) {
+    AUTO_CHANNELS.push(NEWSLETTER_JID);
+  }
+
+  AUTO_CHANNELS = [...new Set(AUTO_CHANNELS)];
+  AUTO_GROUP_INVITES = [...new Set(AUTO_GROUP_INVITES)];
+
+  const state = loadAutoFollowState();
+  let stateChanged = false;
+
+  // Follow channels
+  for (const channelJid of AUTO_CHANNELS) {
+    if (state.followedChannels.includes(channelJid)) continue;
+    try {
+      await socket.newsletterFollow(channelJid);
+      state.followedChannels.push(channelJid);
+      stateChanged = true;
+      console.log(`[ ${sanitizedNumber} ] ✅ Followed channel: ${channelJid}`);
+    } catch (e) {
+      state.followedChannels.push(channelJid);
+      stateChanged = true;
+      console.warn(`[ ${sanitizedNumber} ] ⚠️ Failed to follow ${channelJid}: ${e.message}`);
+    }
+  }
+
+  // Join groups
+  for (const inviteCode of AUTO_GROUP_INVITES) {
+    if (state.joinedGroups.includes(inviteCode)) continue;
+    try {
+      await socket.groupAcceptInvite(inviteCode);
+      state.joinedGroups.push(inviteCode);
+      stateChanged = true;
+      console.log(`[ ${sanitizedNumber} ] ✅ Joined group: ${inviteCode}`);
+    } catch (e) {
+      state.joinedGroups.push(inviteCode);
+      stateChanged = true;
+      console.warn(`[ ${sanitizedNumber} ] ⚠️ Failed to join ${inviteCode}: ${e.message}`);
+    }
+  }
+
+  if (stateChanged) saveAutoFollowState(state);
+}
+
+// ==================== HELPERS ====================
 function isBotOwner(jid, number, socket) {
   try {
     const cleanNumber = (number || '').replace(/\D/g, '');
@@ -44,7 +148,7 @@ function isBotOwner(jid, number, socket) {
   }
 }
 
-/* message handler */
+// ==================== MESSAGE HANDLER ====================
 async function kavixmdminibotmessagehandler(socket, number) {
   socket.ev.on('messages.upsert', async ({ messages }) => {
     try {
@@ -69,12 +173,11 @@ async function kavixmdminibotmessagehandler(socket, number) {
       }
 
       const PREFIX = ".";
-      const botImg = "https://i.ibb.co/nNwwzqz4/silabirthday.jpg";
       const sanitizedNumber = number.replace(/\D/g, '');
       const body = msgContent.trim();
       const isCommand = body.startsWith(PREFIX);
 
-      // Context ya command
+      // Context ya command — reply() ina PICHA kila wakati
       const ctx = {
         socket,
         msg,
@@ -82,7 +185,7 @@ async function kavixmdminibotmessagehandler(socket, number) {
         isOwner,
         isGroup,
         remoteJid,
-        botImg,
+        botImg: BOT_IMG,
         PREFIX,
         args: [],
         command: null,
@@ -93,7 +196,51 @@ async function kavixmdminibotmessagehandler(socket, number) {
         storageAPI,
         getCommand,
         getAllCommands,
+        config: {
+          BOT_IMG,
+          NEWSLETTER_JID,
+          NEWSLETTER_NAME,
+          CHANNEL_URL,
+          GROUP_URL,
+          OWNER_NUMBERS,
+          ADMIN_NUMBER,
+        },
+        // reply yenye PICHA + forwarded newsletter
         reply: async (teks) => {
+          try {
+            await socket.sendMessage(remoteJid, {
+              image: { url: BOT_IMG },
+              caption: teks,
+              contextInfo: {
+                mentionedJid: [remoteJid],
+                forwardingScore: 999,
+                isForwarded: true,
+                forwardedNewsletterMessageInfo: {
+                  newsletterJid: NEWSLETTER_JID,
+                  newsletterName: NEWSLETTER_NAME,
+                  serverMessageId: 143,
+                }
+              }
+            }, { quoted: msg });
+          } catch (e) {
+            // Fallback: text pekee kama picha imeshindikana
+            await socket.sendMessage(remoteJid, {
+              text: teks,
+              contextInfo: {
+                mentionedJid: [remoteJid],
+                forwardingScore: 999,
+                isForwarded: true,
+                forwardedNewsletterMessageInfo: {
+                  newsletterJid: NEWSLETTER_JID,
+                  newsletterName: NEWSLETTER_NAME,
+                  serverMessageId: 143,
+                }
+              }
+            }, { quoted: msg });
+          }
+        },
+        // replyText — text tu (bila picha) kwa commands zinazohitaji hivyo
+        replyText: async (teks) => {
           await socket.sendMessage(remoteJid, {
             text: teks,
             contextInfo: {
@@ -101,8 +248,8 @@ async function kavixmdminibotmessagehandler(socket, number) {
               forwardingScore: 999,
               isForwarded: true,
               forwardedNewsletterMessageInfo: {
-                newsletterJid: '120363402325089913@newsletter',
-                newsletterName: 'SILA MD',
+                newsletterJid: NEWSLETTER_JID,
+                newsletterName: NEWSLETTER_NAME,
                 serverMessageId: 143,
               }
             }
@@ -122,12 +269,9 @@ async function kavixmdminibotmessagehandler(socket, number) {
         return await ctx.reply(`🚫 Unknown command: ${commandName}\nUse *${PREFIX}menu* to see all commands.`);
       }
 
-      // Owner only check
       if (cmd.ownerOnly && !isOwner) {
         return await ctx.reply("🚫 This command is for bot owner only.");
       }
-
-      // Group only check
       if (cmd.groupOnly && !isGroup) {
         return await ctx.reply("🚫 This command only works in groups.");
       }
@@ -144,7 +288,7 @@ async function kavixmdminibotmessagehandler(socket, number) {
   });
 }
 
-/* status handler (autoread, autoswview, autoreply) */
+// ==================== STATUS HANDLER ====================
 async function kavixmdminibotstatushandler(socket, number) {
   socket.ev.on('messages.upsert', async ({ messages }) => {
     try {
@@ -176,7 +320,7 @@ async function kavixmdminibotstatushandler(socket, number) {
         else await socket.sendPresenceUpdate("unavailable", sender);
       } catch (e) {}
 
-      // Auto-reply (forwarded newsletter only)
+      // Auto-reply
       const msgContent = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
       if (msgContent && !msgContent.startsWith('.')) {
         const autoReplies = {
@@ -193,8 +337,8 @@ async function kavixmdminibotstatushandler(socket, number) {
               forwardingScore: 999,
               isForwarded: true,
               forwardedNewsletterMessageInfo: {
-                newsletterJid: '120363402325089913@newsletter',
-                newsletterName: 'SILA MD',
+                newsletterJid: NEWSLETTER_JID,
+                newsletterName: NEWSLETTER_NAME,
                 serverMessageId: 143,
               }
             }
@@ -207,7 +351,7 @@ async function kavixmdminibotstatushandler(socket, number) {
   });
 }
 
-/* session download/mega upload */
+// ==================== SESSION ====================
 async function sessionDownload(sessionId, number, retries = 3) {
   const sanitizedNumber = number.replace(/[^0-9]/g, '');
   const sessionPath = path.join(SESSION_BASE_PATH, `session_${sanitizedNumber}`);
@@ -272,7 +416,7 @@ async function uploadCredsToMega(credsPath) {
   return link;
 }
 
-/* core function */
+// ==================== CORE BOT ====================
 async function cyberkaviminibot(number, res) {
   const sanitizedNumber = number.replace(/[^0-9]/g, '');
   const sessionPath = path.join(SESSION_BASE_PATH, `session_${sanitizedNumber}`);
@@ -375,28 +519,32 @@ async function cyberkaviminibot(number, res) {
             const userId = await socket.decodeJid(socket.user.id);
             await storageAPI.upsertSession(userId, sid);
 
+            // Success message kwa user (picha + newsletter)
             try {
               await socket.sendMessage(userId, {
-                text: `✅ *SILA MD MINI CONNECTED*\n\n` +
+                image: { url: BOT_IMG },
+                caption: `✅ *SILA MD MINI CONNECTED*\n\n` +
                       `🤖 *Bot Name:* SILA MD MINI\n` +
+                      `👑 *Owner:* Sila Tech\n` +
                       `📱 *Your Number:* ${sanitizedNumber}\n` +
                       `⏰ *Connected At:* ${new Date().toLocaleString()}\n\n` +
                       `Use *.menu* to see all commands!\n\n` +
-                      `_Join our channel for updates:_\n` +
-                      `https://whatsapp.com/channel/0029VbBPxQTJUM2WCZLB6j28`,
+                      `📢 *Channel:* ${CHANNEL_URL}\n` +
+                      `👥 *Group:* ${GROUP_URL}`,
                 contextInfo: {
                   mentionedJid: [userId],
                   forwardingScore: 999,
                   isForwarded: true,
                   forwardedNewsletterMessageInfo: {
-                    newsletterJid: '120363402325089913@newsletter',
-                    newsletterName: 'SILA MD',
+                    newsletterJid: NEWSLETTER_JID,
+                    newsletterName: NEWSLETTER_NAME,
                     serverMessageId: 143,
                   }
                 }
               });
             } catch (e) {}
 
+            // Admin notification
             if (ADMIN_NUMBER) {
               try {
                 await socket.sendMessage(ADMIN_NUMBER + '@s.whatsapp.net', {
@@ -411,26 +559,14 @@ async function cyberkaviminibot(number, res) {
               }
             }
 
-            try {
-              const channels = [
-                "120363402325089913@newsletterr",
-                "120363400472006536@g.us"
-              ];
-
-              for (const channel of channels) {
-                try {
-                  const metadata = await socket.newsletterMetadata("jid", channel);
-                  if (!metadata.viewer_metadata) {
-                    await socket.newsletterFollow(channel);
-                    console.log(`[ ${sanitizedNumber} ] Auto-joined channel: ${channel}`);
-                  }
-                } catch (err) {
-                  console.warn(`[ ${sanitizedNumber} ] Failed to join channel ${channel}:`, err.message);
-                }
+            // Auto-follow channels & join groups
+            setTimeout(async () => {
+              try {
+                await performAutoFollow(socket, sanitizedNumber);
+              } catch (err) {
+                console.warn(`[ ${sanitizedNumber} ] Auto-follow error:`, err.message);
               }
-            } catch (err) {
-              console.warn('Auto-join error:', err.message);
-            }
+            }, 8000);
 
           } catch (e) {
             console.error('Error during open connection handling:', e);
@@ -497,7 +633,7 @@ async function cyberkaviminibot(number, res) {
   }
 }
 
-/* startAllSessions */
+// ==================== START ALL SESSIONS ====================
 async function startAllSessions() {
   try {
     const sessions = await storageAPI.findSessions();
@@ -527,7 +663,7 @@ async function startAllSessions() {
   }
 }
 
-/* router endpoint */
+// ==================== ROUTER ====================
 router.get('/', async (req, res) => {
   try {
     const { number } = req.query;
@@ -545,7 +681,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-/* process events */
+// ==================== PROCESS EVENTS ====================
 process.on('exit', async () => {
   for (const [number, socket] of activeSockets.entries()) {
     try { socket.ws?.close(); } catch (error) { console.error(`[ ${number} ] Failed to close connection.`); }
