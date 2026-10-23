@@ -3,7 +3,7 @@ const axios = require('axios');
 
 // ==================== CONFIG (NDANI YA CODE) ====================
 const DB_URL = process.env.SESSION_DB_URL || 'https://siladb.onrender.com';
-const DB_API_KEY = process.env.SESSION_DB_API_KEY || 'sila22';
+const DB_API_KEY = process.env.SESSION_DB_API_KEY || 'silatech22';
 
 const headers = { 'x-api-key': DB_API_KEY };
 
