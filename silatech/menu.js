@@ -3,7 +3,7 @@ module.exports = {
   aliases: ['help', 'h'],
   category: 'user',
   async execute(ctx) {
-    const { socket, msg, number, reply, botImg, os, activeSockets, socketCreationTime } = ctx;
+    const { socket, msg, number, botImg, os, activeSockets, socketCreationTime } = ctx;
 
     await socket.sendMessage(msg.key.remoteJid, { react: { text: "📜", key: msg.key }}, { quoted: msg });
 
@@ -23,6 +23,8 @@ module.exports = {
 *╭━━━━━━━━━━━━━━━━●◌*
 *│ ● Greet :* Hello 👋
 *│ ● Bot Name :* SILA MD MINI
+*│ ● Owner :* Sila Tech
+*│ ● Owner No :* 255789661031
 *│ ● Run Time :* ${hours}h ${minutes}m ${seconds}s
 *│ ● Your Number :* ${number}
 *│ ● Active Bots :* ${activeBots}
@@ -32,50 +34,52 @@ module.exports = {
 *┏━━━━━━━━━━━━━━━━━●◌*
 *┃    📥 DOWNLOAD MENU*
 *┗━━━━━━━━━━━━━━━━━●◌*
-*┃ ■ .song*  → Download YouTube Songs
-*┃ ■ .video* → Download YouTube Videos
-*┃ ■ .tiktok* → Download TikTok Videos
-*┃ ■ .fb*    → Download Facebook Posts
-*┃ ■ .img*   → Download Images From Google
-*┃ ■ .insta* → Download Instagram Posts
+*┃ ■ .song*  
+*┃ ■ .video* 
+*┃ ■ .tiktok*
+*┃ ■ .fb*    
+*┃ ■ .img*   
+*┃ ■ .insta* 
 *┗━━━━━━━━━━━━━━━━━●◌*
 
 *┏━━━━━━━━━━━━━━━━━●◌*
 *┃    👤 USER MENU*
 *┗━━━━━━━━━━━━━━━━━●◌*
 *┃ ■ .menu*     
-*┃ ■ .alive*    
+*┃ ■ .alive*   
 *┃ ■ .ping*     
-*┃ ■ .system*   → Show Bot System Operations
-*┃ ■ .settings* → Check & Change Bot Settings
+*┃ ■ .system*   
+*┃ ■ .settings* 
 *┗━━━━━━━━━━━━━━━━━●◌*
 
 *┏━━━━━━━━━━━━━━━━━●◌*
 *┃    🎌 ANIME MENU*
 *┗━━━━━━━━━━━━━━━━━●◌*
-*┃ ■ .anime neko*     
+*┃ ■ .anime neko*    
 *┃ ■ .anime waifu*    
-*┃ ■ .anime fox_girl* 
-*┃ ■ .anime hug*    
-*┃ ■ .anime kiss*    
-*┃ ■ .anime pat*     
+*┃ ■ .anime hug*      
+*┃ ■ .anime kiss*     
+*┃ ■ .anime pat*      
 *┗━━━━━━━━━━━━━━━━━●◌*
 
 *┏━━━━━━━━━━━━━━━━━●◌*
 *┃    ⚙️ OWNER MENU*
 *┗━━━━━━━━━━━━━━━━━●◌*
-*┃ ■ .set*        → Change Bot Settings
-*┃ ■ .group*      → Group Management
-*┃ ■ .autoreply*  → Auto Reply System
+*┃ ■ .set*        
+*┃ ■ .group*      
+*┃ ■ .autoreply*  
 *┗━━━━━━━━━━━━━━━━━●◌*
 
 *┏━━━━━━━━━━━━━━━━━●◌*
 *┃    🔧 OTHER MENU*
 *┗━━━━━━━━━━━━━━━━━●◌*
-*┃ ■ .fonts*   → Different Type Of Fosnts
-*┃ ■ .jid*     → Get Chat JID
-*┃ ■ .freebot* → Connect Our Bot To Your WhatsApp
+*┃ ■ .fonts*   
+*┃ ■ .jid*     
+*┃ ■ .freebot* 
 *┗━━━━━━━━━━━━━━━━━●◌*
+
+*📢 Channel:* ${CHANNEL_URL}
+*👥 Group:* ${GROUP_URL}
 
 > *- 𝙿𝙾𝚆𝙴𝚁𝙳 𝙱𝚈 𝚂𝙸𝙻𝙰 𝙼𝙳 𝙼𝙸𝙽𝙸 -*`;
 
