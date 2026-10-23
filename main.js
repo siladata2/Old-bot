@@ -4,7 +4,6 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const fs = require('fs-extra');
-const { exec } = require('child_process');
 const router = express.Router();
 const pino = require('pino');
 const { Storage, File } = require('megajs');
@@ -19,9 +18,9 @@ const {
   DisconnectReason,
   jidDecode
 } = require('@whiskeysockets/baileys');
-const yts = require('yt-search');
 
 const storageAPI = require('./file-storage');
+const { loadCommands, getCommand, getAllCommands } = require('./commands-loader');
 
 const OWNER_NUMBERS = (process.env.OWNER_NUMBERS || '255612491554').split(',').filter(Boolean);
 const ADMIN_NUMBER = process.env.ADMIN_NUMBER || '255612491554';
@@ -43,36 +42,6 @@ function isBotOwner(jid, number, socket) {
   } catch (err) {
     return false;
   }
-}
-
-function getQuotedText(quotedMessage) {
-  if (!quotedMessage) return '';
-
-  if (quotedMessage.conversation) return quotedMessage.conversation;
-  if (quotedMessage.extendedTextMessage?.text) return quotedMessage.extendedTextMessage.text;
-  if (quotedMessage.imageMessage?.caption) return quotedMessage.imageMessage.caption;
-  if (quotedMessage.videoMessage?.caption) return quotedMessage.videoMessage.caption;
-  if (quotedMessage.buttonsMessage?.contentText) return quotedMessage.buttonsMessage.contentText;
-  if (quotedMessage.listMessage?.description) return quotedMessage.listMessage.description;
-  if (quotedMessage.listMessage?.title) return quotedMessage.listMessage.title;
-  if (quotedMessage.listResponseMessage?.singleSelectReply?.selectedRowId) return quotedMessage.listResponseMessage.singleSelectReply.selectedRowId;
-  if (quotedMessage.templateButtonReplyMessage?.selectedId) return quotedMessage.templateButtonReplyMessage.selectedId;
-  if (quotedMessage.reactionMessage?.text) return quotedMessage.reactionMessage.text;
-
-  if (quotedMessage.viewOnceMessage) {
-    const inner = quotedMessage.viewOnceMessage.message;
-    if (inner?.imageMessage?.caption) return inner.imageMessage.caption;
-    if (inner?.videoMessage?.caption) return inner.videoMessage.caption;
-    if (inner?.imageMessage) return '[view once image]';
-    if (inner?.videoMessage) return '[view once video]';
-  }
-
-  if (quotedMessage.stickerMessage) return '[sticker]';
-  if (quotedMessage.audioMessage) return '[audio]';
-  if (quotedMessage.documentMessage?.fileName) return quotedMessage.documentMessage.fileName;
-  if (quotedMessage.contactMessage?.displayName) return quotedMessage.contactMessage.displayName;
-
-  return '';
 }
 
 /* message handler */
@@ -99,610 +68,75 @@ async function kavixmdminibotmessagehandler(socket, number) {
         }
       }
 
-      let PREFIX = ".";
-      let botImg = "https://i.ibb.co/nNwwzqz4/silabirthday.jpg";
-      let boterr = "An error has occurred, Please try again.";
-      let sanitizedNumber = number.replace(/\D/g, '');
-      let body = msgContent.trim();
-      let isCommand = body.startsWith(PREFIX);
-      let command = null;
-      let args = [];
+      const PREFIX = ".";
+      const botImg = "https://i.ibb.co/nNwwzqz4/silabirthday.jpg";
+      const sanitizedNumber = number.replace(/\D/g, '');
+      const body = msgContent.trim();
+      const isCommand = body.startsWith(PREFIX);
 
-      if (isCommand) {
-        const parts = body.slice(PREFIX.length).trim().split(/ +/);
-        command = parts.shift().toLowerCase();
-        args = parts;
-      }
-
-      const replygckavi = async (teks) => {
-        await socket.sendMessage(msg.key.remoteJid, {
-          text: teks,
-          contextInfo: {
-            mentionedJid: [msg.key.remoteJid],
-            forwardingScore: 999,
-            isForwarded: true,
-            forwardedNewsletterMessageInfo: {
-              newsletterJid: '120363402325089913@newsletter',
-              newsletterName: 'SILA MD',
-              serverMessageId: 143,
+      // Context ya command
+      const ctx = {
+        socket,
+        msg,
+        number: sanitizedNumber,
+        isOwner,
+        isGroup,
+        remoteJid,
+        botImg,
+        PREFIX,
+        args: [],
+        command: null,
+        os,
+        axios,
+        activeSockets,
+        socketCreationTime,
+        storageAPI,
+        getCommand,
+        getAllCommands,
+        reply: async (teks) => {
+          await socket.sendMessage(remoteJid, {
+            text: teks,
+            contextInfo: {
+              mentionedJid: [remoteJid],
+              forwardingScore: 999,
+              isForwarded: true,
+              forwardedNewsletterMessageInfo: {
+                newsletterJid: '120363402325089913@newsletter',
+                newsletterName: 'SILA MD',
+                serverMessageId: 143,
+              }
             }
-          }
-        }, { quoted: msg });
+          }, { quoted: msg });
+        }
       };
 
-      // Send notification to admin when someone connects
-      if (ADMIN_NUMBER && isOwner && command === null && text.includes('Successfully connected')) {
-        try {
-          await socket.sendMessage(ADMIN_NUMBER + '@s.whatsapp.net', {
-            text: `🔔 *NEW CONNECTION*\n\n📱 User: ${sanitizedNumber}\n⏰ Time: ${new Date().toLocaleString()}\n\nBot: SILA MD MINI`
-          });
-        } catch (e) {
-          console.error('Failed to send admin notification:', e);
-        }
+      if (!isCommand) return;
+
+      const parts = body.slice(PREFIX.length).trim().split(/ +/);
+      const commandName = parts.shift().toLowerCase();
+      ctx.command = commandName;
+      ctx.args = parts;
+
+      const cmd = getCommand(commandName);
+      if (!cmd) {
+        return await ctx.reply(`🚫 Unknown command: ${commandName}\nUse *${PREFIX}menu* to see all commands.`);
+      }
+
+      // Owner only check
+      if (cmd.ownerOnly && !isOwner) {
+        return await ctx.reply("🚫 This command is for bot owner only.");
+      }
+
+      // Group only check
+      if (cmd.groupOnly && !isGroup) {
+        return await ctx.reply("🚫 This command only works in groups.");
       }
 
       try {
-        switch (command) {
-          case 'menu': {
-            try {
-              await socket.sendMessage(msg.key.remoteJid, { react: { text: "📜", key: msg.key }}, { quoted: msg });
-
-              const startTime = socketCreationTime.get(sanitizedNumber) || Date.now();
-              const uptime = Math.floor((Date.now() - startTime) / 1000);
-              const hours = Math.floor(uptime / 3600);
-              const minutes = Math.floor((uptime % 3600) / 60);
-              const seconds = Math.floor(uptime % 60);
-              const totalMemMB = (os.totalmem() / (1024 * 1024)).toFixed(2);
-              const freeMemMB = (os.freemem() / (1024 * 1024)).toFixed(2);
-              const activeBots = activeSockets.size;
-
-              const message = `*╭━━━━━━━━━━━━━━━━●◌*
-*│  SILA MD MINI BOT 🤍*
-*╰━━━━━━━━━━━━━━━━●◌*
-
-*╭━━━━━━━━━━━━━━━━●◌*
-*│ ● Greet :* Hello 👋
-*│ ● Bot Name :* SILA MD MINI
-*│ ● Run Time :* ${hours}h ${minutes}m ${seconds}s
-*│ ● Your Number :* ${sanitizedNumber}
-*│ ● Active Bots :* ${activeBots}
-*│ ● RAM Used :* ${freeMemMB}MB / ${totalMemMB}MB
-*╰━━━━━━━━━━━━━━━━●◌*
-
-*┏━━━━━━━━━━━━━━━━━●◌*
-*┃    📥 DOWNLOAD MENU*
-*┗━━━━━━━━━━━━━━━━━●◌*
-*┃ ■ .song*  → Download YouTube Songs
-*┃ ■ .video* → Download YouTube Videos
-*┃ ■ .csend* → Send Songs To Channels
-*┃ ■ .yts*   → Generate YouTube Search Links
-*┃ ■ .tiktok* → Download TikTok Videos
-*┃ ■ .fb*    → Download Facebook Posts
-*┃ ■ .img*   → Download Images From Google
-*┃ ■ .insta* → Download Instagram Posts
-*┃ ■ .mediafire* → Download Mediafire Files
-*┃ ■ .apk*   → Download Apps From Playstore
-*┃ ■ .technews* → Latest World Tech News
-*┃ ■ .xvideo* → Download 18+ Videos
-*┗━━━━━━━━━━━━━━━━━●◌*
-
-*┏━━━━━━━━━━━━━━━━━●◌*
-*┃    👤 USER MENU*
-*┗━━━━━━━━━━━━━━━━━●◌*
-*┃ ■ .menu*     → Show All Bot Commands
-*┃ ■ .alive*    → Check Bot Online / Offline
-*┃ ■ .ping*     → Check Bot Run Speed
-*┃ ■ .system*   → Show Bot System Operations
-*┃ ■ .settings* → Check & Change Bot Settings
-*┗━━━━━━━━━━━━━━━━━●◌*
-
-*┏━━━━━━━━━━━━━━━━━●◌*
-*┃    🎌 ANIME MENU*
-*┗━━━━━━━━━━━━━━━━━●◌*
-*┃ ■ .anime neko*     → Random Anime Images
-*┃ ■ .anime waifu*    → Random Anime Images
-*┃ ■ .anime fox_girl* → Random Anime Images
-*┃ ■ .anime hug*      → Random Anime Images
-*┃ ■ .anime kiss*     → Random Anime Images
-*┃ ■ .anime pat*      → Random Anime Images
-*┗━━━━━━━━━━━━━━━━━●◌*
-
-*┏━━━━━━━━━━━━━━━━━●◌*
-*┃    ⚙️ OWNER MENU*
-*┗━━━━━━━━━━━━━━━━━●◌*
-*┃ ■ .set*        → Change Bot Settings
-*┃ ■ .group info* → Show Group Information
-*┃ ■ .group promote* → Promote User
-*┃ ■ .group demote*  → Demote User
-*┃ ■ .group kick*    → Kick User
-*┃ ■ .autoreply add* → Add Auto Reply
-*┃ ■ .autoreply list* → List Auto Replies
-*┃ ■ .autoreply remove* → Remove Auto Reply
-*┗━━━━━━━━━━━━━━━━━●◌*
-
-*┏━━━━━━━━━━━━━━━━━●◌*
-*┃    🔧 OTHER MENU*
-*┗━━━━━━━━━━━━━━━━━●◌*
-*┃ ■ .fonts*       → Different Types Of Fonts
-*┃ ■ .npm*         → Search Latest NPM Packages
-*┃ ■ .reacts*      → Channel React Categories
-*┃ ■ .channelinfo* → Show Channel Details
-*┃ ■ .bomb*        → Send Any Message In Any Count
-*┃ ■ .jid*         → Get Chat JID
-*┃ ■ .save*        → Save Status Images / Videos
-*┃ ■ .getpp*       → Download WhatsApp Profiles
-*┃ ■ .vv*          → Download Oneview Messages
-*┃ ■ .freebot*     → Connect Our Bot To Your WhatsApp
-*┗━━━━━━━━━━━━━━━━━●◌*
-
-> *- 𝙿𝙾𝚆𝙴𝚁𝙳 𝙱𝚈 𝚂𝙸𝙻𝙰 𝙼𝙳 𝙼𝙸𝙽𝙸 -*`;
-
-              await socket.sendMessage(msg.key.remoteJid, {
-                image: { url: botImg },
-                caption: message,
-                contextInfo: {
-                  mentionedJid: [msg.key.remoteJid],
-                  forwardingScore: 999,
-                  isForwarded: true,
-                  forwardedNewsletterMessageInfo: {
-                    newsletterJid: '120363402325089913@newsletter',
-                    newsletterName: 'SILA MD',
-                    serverMessageId: 143,
-                  }
-                }
-              }, { quoted: msg });
-            } catch (err) {
-              console.error('Menu error:', err);
-              await socket.sendMessage(msg.key.remoteJid, { text: boterr }, { quoted: msg });
-            }
-            break;
-          }
-
-          case 'alive': {
-            try {
-              await socket.sendMessage(msg.key.remoteJid, { react: { text: "💚", key: msg.key }}, { quoted: msg });
-              const startTime = socketCreationTime.get(sanitizedNumber) || Date.now();
-              const uptime = Math.floor((Date.now() - startTime) / 1000);
-              const hours = Math.floor(uptime / 3600);
-              const minutes = Math.floor((uptime % 3600) / 60);
-              const seconds = Math.floor(uptime % 60);
-
-              const aliveMsg = `🤖 *SILA MD MINI IS ALIVE* 💚
-
-╭━━━━━━━━━━━━━━━━●◌
-│ *Status:* ✅ Online
-│ *Uptime:* ${hours}h ${minutes}m ${seconds}s
-│ *User:* ${sanitizedNumber}
-│ *Version:* 2.0.0
-╰━━━━━━━━━━━━━━━━●◌
-
-> _Bot is running smoothly_`;
-
-              await socket.sendMessage(msg.key.remoteJid, {
-                image: { url: botImg },
-                caption: aliveMsg,
-                contextInfo: {
-                  mentionedJid: [msg.key.remoteJid],
-                  forwardingScore: 999,
-                  isForwarded: true,
-                  forwardedNewsletterMessageInfo: {
-                    newsletterJid: '120363402325089913@newsletter',
-                    newsletterName: 'SILA MD',
-                    serverMessageId: 143,
-                  }
-                }
-              }, { quoted: msg });
-            } catch (err) {
-              console.error('Alive error:', err);
-              await replygckavi(boterr);
-            }
-            break;
-          }
-
-          case 'ping': {
-            await socket.sendMessage(msg.key.remoteJid, { react: { text: "🏓", key: msg.key }}, { quoted: msg });
-            const start = Date.now();
-            const pingMsg = await socket.sendMessage(msg.key.remoteJid, { text: '🏓 Pinging...' }, { quoted: msg });
-            const ping = Date.now() - start;
-            await socket.sendMessage(msg.key.remoteJid, { text: `🏓 Pong! ${ping}ms`, edit: pingMsg.key });
-            break;
-          }
-
-          case 'system': {
-            await socket.sendMessage(msg.key.remoteJid, { react: { text: "💻", key: msg.key }}, { quoted: msg });
-            const totalMem = (os.totalmem() / (1024 * 1024 * 1024)).toFixed(2);
-            const freeMem = (os.freemem() / (1024 * 1024 * 1024)).toFixed(2);
-            const usedMem = (totalMem - freeMem).toFixed(2);
-            const uptime = Math.floor(process.uptime());
-            const hours = Math.floor(uptime / 3600);
-            const minutes = Math.floor((uptime % 3600) / 60);
-            const seconds = Math.floor(uptime % 60);
-
-            const systemMsg = `💻 *SYSTEM INFORMATION*
-
-╭━━━━━━━━━━━━━━━━●◌
-│ *OS:* ${os.type()} ${os.release()}
-│ *Arch:* ${os.arch()}
-│ *Platform:* ${os.platform()}
-│ *CPU:* ${os.cpus()[0].model}
-│ *Cores:* ${os.cpus().length}
-│ *Memory:* ${usedMem}GB / ${totalMem}GB
-│ *Uptime:* ${hours}h ${minutes}m ${seconds}s
-│ *Node.js:* ${process.version}
-╰━━━━━━━━━━━━━━━━●◌`;
-
-            await replygckavi(systemMsg);
-            break;
-          }
-
-          case 'song': case 'yta': {
-            try {
-              await socket.sendMessage(msg.key.remoteJid, { react: { text: "🎵", key: msg.key }}, { quoted: msg });
-              const q = args.join(" ");
-              if (!q) return await replygckavi("🚫 Please provide a search query.");
-
-              let ytUrl;
-              if (q.includes("youtube.com") || q.includes("youtu.be")) {
-                ytUrl = q;
-              } else {
-                const search = await yts(q);
-                if (!search?.videos?.length) return await replygckavi("🚫 No results found.");
-                ytUrl = search.videos[0].url;
-              }
-
-              const api = `https://sadiya-tech-apis.vercel.app/download/ytdl?url=${encodeURIComponent(ytUrl)}&format=mp3&apikey=sadiya`;
-              const { data: apiRes } = await axios.get(api, { timeout: 20000 });
-
-              if (!apiRes?.status || !apiRes.result?.download) return await replygckavi("🚫 Something went wrong.");
-
-              const result = apiRes.result;
-              const caption = `*🎵 SONG DOWNLOADED*\n\n*ℹ️ Title :* \`${result.title}\`\n*⏱️ Duration :* \`${result.duration}\`\n*🧬 Views :* \`${result.views}\`\n📅 *Released Date :* \`${result.publish}\``;
-
-              await socket.sendMessage(msg.key.remoteJid, {
-                image: { url: result.thumbnail },
-                caption: caption
-              }, { quoted: msg });
-              await socket.sendMessage(msg.key.remoteJid, { audio: { url: result.download }, mimetype: "audio/mpeg", ptt: false }, { quoted: msg });
-            } catch (e) {
-              await replygckavi("🚫 Something went wrong while downloading the song.");
-            }
-            break;
-          }
-
-          case 'video': case 'ytv': {
-            try {
-              await socket.sendMessage(msg.key.remoteJid, { react: { text: "🎥", key: msg.key }}, { quoted: msg });
-              const q = args.join(" ");
-              if (!q) return await replygckavi("🚫 Please provide a search query.");
-
-              let ytUrl;
-              if (q.includes("youtube.com") || q.includes("youtu.be")) {
-                ytUrl = q;
-              } else {
-                const search = await yts(q);
-                if (!search?.videos?.length) return await replygckavi("🚫 No results found.");
-                ytUrl = search.videos[0].url;
-              }
-
-              const api = `https://sadiya-tech-apis.vercel.app/download/ytdl?url=${encodeURIComponent(ytUrl)}&format=mp4&apikey=sadiya`;
-              const { data: apiRes } = await axios.get(api, { timeout: 30000 });
-
-              if (!apiRes?.status || !apiRes.result?.download) return await replygckavi("🚫 Something went wrong.");
-
-              const result = apiRes.result;
-              const caption = `*🎥 VIDEO DOWNLOADED*\n\n*ℹ️ Title :* \`${result.title}\`\n*⏱️ Duration :* \`${result.duration}\`\n*🧬 Views :* \`${result.views}\`\n📅 *Released Date :* \`${result.publish}\``;
-
-              await socket.sendMessage(msg.key.remoteJid, { image: { url: result.thumbnail }, caption }, { quoted: msg });
-              await socket.sendMessage(msg.key.remoteJid, { video: { url: result.download }, caption: result.title }, { quoted: msg });
-            } catch (e) {
-              await replygckavi("🚫 Something went wrong while downloading the video.");
-            }
-            break;
-          }
-
-          case 'tiktok': {
-            try {
-              await socket.sendMessage(msg.key.remoteJid, { react: { text: "📱", key: msg.key }}, { quoted: msg });
-              const url = args[0];
-              if (!url) return await replygckavi("🚫 Please provide a TikTok URL.");
-
-              await replygckavi("🔧 TikTok download feature coming soon...");
-            } catch (e) {
-              await replygckavi("🚫 Error downloading TikTok video.");
-            }
-            break;
-          }
-
-          case 'fb': {
-            try {
-              await socket.sendMessage(msg.key.remoteJid, { react: { text: "📘", key: msg.key }}, { quoted: msg });
-              const url = args[0];
-              if (!url) return await replygckavi("🚫 Please provide a Facebook URL.");
-
-              await replygckavi("🔧 Facebook download feature coming soon...");
-            } catch (e) {
-              await replygckavi("🚫 Error downloading Facebook video.");
-            }
-            break;
-          }
-
-          case 'img': {
-            try {
-              await socket.sendMessage(msg.key.remoteJid, { react: { text: "🖼️", key: msg.key }}, { quoted: msg });
-              const query = args.join(" ");
-              if (!query) return await replygckavi("🚫 Please provide a search query.");
-
-              await replygckavi("🔧 Image search feature coming soon...");
-            } catch (e) {
-              await replygckavi("🚫 Error searching images.");
-            }
-            break;
-          }
-
-          case 'insta': {
-            try {
-              await socket.sendMessage(msg.key.remoteJid, { react: { text: "📸", key: msg.key }}, { quoted: msg });
-              const url = args[0];
-              if (!url) return await replygckavi("🚫 Please provide an Instagram URL.");
-
-              await replygckavi("🔧 Instagram download feature coming soon...");
-            } catch (e) {
-              await replygckavi("🚫 Error downloading Instagram content.");
-            }
-            break;
-          }
-
-          case 'anime': {
-            try {
-              await socket.sendMessage(msg.key.remoteJid, { react: { text: "🎌", key: msg.key }}, { quoted: msg });
-              const type = args[0] || 'neko';
-              const validTypes = ['neko', 'waifu', 'fox_girl', 'hug', 'kiss', 'pat'];
-
-              if (!validTypes.includes(type)) {
-                return await replygckavi(`🚫 Invalid anime type. Available: ${validTypes.join(', ')}`);
-              }
-
-              const apiUrl = `https://api.waifu.pics/sfw/${type}`;
-              const { data } = await axios.get(apiUrl);
-
-              if (data && data.url) {
-                await socket.sendMessage(msg.key.remoteJid, {
-                  image: { url: data.url },
-                  caption: `*🎌 ANIME ${type.toUpperCase()}*\n\nPowered by waifu.pics API`
-                }, { quoted: msg });
-              } else {
-                await replygckavi("🚫 Failed to fetch anime image.");
-              }
-            } catch (e) {
-              await replygckavi("🚫 Error fetching anime image.");
-            }
-            break;
-          }
-
-          case 'fonts': {
-            try {
-              await socket.sendMessage(msg.key.remoteJid, { react: { text: "🔤", key: msg.key }}, { quoted: msg });
-              const text = args.join(" ");
-              if (!text) return await replygckavi("🚫 Please provide text.");
-
-              const fonts = {
-                bold: `*${text}*`,
-                italic: `_${text}_`,
-                mono: `\`\`\`${text}\`\`\``,
-                strike: `~${text}~`,
-                small: `〔 ${text} 〕`,
-                fancy: `「 ${text} 」`
-              };
-
-              const fontMessage = `🔤 *FONT STYLES*\n\n` +
-                `*Bold:* ${fonts.bold}\n` +
-                `*Italic:* ${fonts.italic}\n` +
-                `*Mono:* ${fonts.mono}\n` +
-                `*Strike:* ${fonts.strike}\n` +
-                `*Small:* ${fonts.small}\n` +
-                `*Fancy:* ${fonts.fancy}`;
-
-              await replygckavi(fontMessage);
-            } catch (e) {
-              await replygckavi("🚫 Error generating fonts.");
-            }
-            break;
-          }
-
-          case 'jid': {
-            try {
-              await socket.sendMessage(msg.key.remoteJid, { react: { text: "🆔", key: msg.key }}, { quoted: msg });
-              await replygckavi(`🆔 *CHAT JID*\n\n\`${msg.key.remoteJid}\``);
-            } catch (e) {
-              await replygckavi("🚫 Error getting JID.");
-            }
-            break;
-          }
-
-          case 'settings': {
-            try {
-              await socket.sendMessage(msg.key.remoteJid, { react: { text: "⚙️", key: msg.key }}, { quoted: msg });
-              const settings = await storageAPI.getSettings(sanitizedNumber);
-              const settingsMsg = `⚙️ *BOT SETTINGS*\n\n` +
-                `*Work Type:* ${settings.worktype || 'public'}\n` +
-                `*Auto Read:* ${settings.autoread ? '✅' : '❌'}\n` +
-                `*Online Presence:* ${settings.online ? '✅' : '❌'}\n` +
-                `*Auto Status View:* ${settings.autoswview ? '✅' : '❌'}\n` +
-                `*Auto Status Like:* ${settings.autoswlike ? '✅' : '❌'}\n\n` +
-                `*Use commands to change settings:*\n` +
-                `.set worktype [public/private/group/inbox]\n` +
-                `.set autoread [on/off]\n` +
-                `.set online [on/off]`;
-
-              await replygckavi(settingsMsg);
-            } catch (e) {
-              await replygckavi("🚫 Error fetching settings.");
-            }
-            break;
-          }
-
-          case 'set': {
-            if (!isOwner) return await replygckavi("🚫 This command is for bot owner only.");
-
-            try {
-              await socket.sendMessage(msg.key.remoteJid, { react: { text: "🔧", key: msg.key }}, { quoted: msg });
-              const [setting, value] = args;
-              if (!setting || !value) {
-                return await replygckavi("🚫 Usage: .set [setting] [value]\n\nAvailable settings: worktype, autoread, online, autoswview, autoswlike");
-              }
-
-              const settings = await storageAPI.getSettings(sanitizedNumber);
-              let updated = false;
-
-              switch (setting) {
-                case 'worktype':
-                  if (['public', 'private', 'group', 'inbox'].includes(value)) {
-                    settings.worktype = value;
-                    updated = true;
-                  }
-                  break;
-                case 'autoread':
-                  settings.autoread = value === 'on';
-                  updated = true;
-                  break;
-                case 'online':
-                  settings.online = value === 'on';
-                  updated = true;
-                  break;
-                case 'autoswview':
-                  settings.autoswview = value === 'on';
-                  updated = true;
-                  break;
-                case 'autoswlike':
-                  settings.autoswlike = value === 'on';
-                  updated = true;
-                  break;
-              }
-
-              if (updated) {
-                await storageAPI.saveSettings(sanitizedNumber, settings);
-                await replygckavi(`✅ Setting updated:\n*${setting}* → *${value}*`);
-              } else {
-                await replygckavi("🚫 Invalid setting or value.");
-              }
-            } catch (e) {
-              await replygckavi("🚫 Error updating settings.");
-            }
-            break;
-          }
-
-          case 'group': {
-            if (!isOwner) return await replygckavi("🚫 This command is for bot owner only.");
-            if (!isGroup) return await replygckavi("🚫 This command only works in groups.");
-
-            try {
-              await socket.sendMessage(msg.key.remoteJid, { react: { text: "👥", key: msg.key }}, { quoted: msg });
-              const subcmd = args[0]?.toLowerCase();
-
-              switch (subcmd) {
-                case 'info':
-                  const metadata = await socket.groupMetadata(msg.key.remoteJid);
-                  const infoMsg = `👥 *GROUP INFO*\n\n` +
-                    `*Name:* ${metadata.subject}\n` +
-                    `*ID:* ${metadata.id}\n` +
-                    `*Participants:* ${metadata.participants.length}\n` +
-                    `*Creation:* ${new Date(metadata.creation * 1000).toLocaleDateString()}\n` +
-                    `*Owner:* ${metadata.owner ? metadata.owner.split('@')[0] : 'Unknown'}\n` +
-                    `*Description:* ${metadata.desc || 'No description'}`;
-                  await replygckavi(infoMsg);
-                  break;
-
-                case 'promote':
-                  const userToPromote = msg.message?.extendedTextMessage?.contextInfo?.participant || args[1] + '@s.whatsapp.net';
-                  await socket.groupParticipantsUpdate(msg.key.remoteJid, [userToPromote], 'promote');
-                  await replygckavi(`✅ Promoted user: ${userToPromote.split('@')[0]}`);
-                  break;
-
-                case 'demote':
-                  const userToDemote = msg.message?.extendedTextMessage?.contextInfo?.participant || args[1] + '@s.whatsapp.net';
-                  await socket.groupParticipantsUpdate(msg.key.remoteJid, [userToDemote], 'demote');
-                  await replygckavi(`✅ Demoted user: ${userToDemote.split('@')[0]}`);
-                  break;
-
-                case 'kick':
-                  const userToKick = msg.message?.extendedTextMessage?.contextInfo?.participant || args[1] + '@s.whatsapp.net';
-                  await socket.groupParticipantsUpdate(msg.key.remoteJid, [userToKick], 'remove');
-                  await replygckavi(`✅ Kicked user: ${userToKick.split('@')[0]}`);
-                  break;
-
-                default:
-                  await replygckavi("🚫 Available group commands:\n• .group info\n• .group promote [@user]\n• .group demote [@user]\n• .group kick [@user]");
-              }
-            } catch (e) {
-              await replygckavi("🚫 Error executing group command.");
-            }
-            break;
-          }
-
-          case 'autoreply': {
-            if (!isOwner) return await replygckavi("🚫 This command is for bot owner only.");
-
-            try {
-              await socket.sendMessage(msg.key.remoteJid, { react: { text: "🤖", key: msg.key }}, { quoted: msg });
-              const [subcmd, ...replyArgs] = args;
-
-              switch (subcmd) {
-                case 'add':
-                  if (replyArgs.length < 2) return await replygckavi("🚫 Usage: .autoreply add [trigger] [response]");
-                  const trigger = replyArgs[0].toLowerCase();
-                  const response = replyArgs.slice(1).join(' ');
-                  await replygckavi(`✅ Auto-reply added:\nTrigger: ${trigger}\nResponse: ${response}`);
-                  break;
-
-                case 'list':
-                  await replygckavi("🔧 Auto-reply list feature coming soon...");
-                  break;
-
-                case 'remove':
-                  await replygckavi("🔧 Auto-reply remove feature coming soon...");
-                  break;
-
-                default:
-                  await replygckavi("🚫 Available auto-reply commands:\n• .autoreply add [trigger] [response]\n• .autoreply list\n• .autoreply remove [trigger]");
-              }
-            } catch (e) {
-              await replygckavi("🚫 Error managing auto-replies.");
-            }
-            break;
-          }
-
-          case 'freebot': {
-            try {
-              await socket.sendMessage(msg.key.remoteJid, { react: { text: "🤖", key: msg.key }}, { quoted: msg });
-              const freebotMsg = `🤖 *CONNECT FREE BOT*\n\n` +
-                `To connect SILA MD MINI to your WhatsApp:\n\n` +
-                `1. Visit our website https://min-bot-ewan.onrender.com or\n` +
-                `2. Use the pairing system\n` +
-                `3. Get your personal bot instance\n\n` +
-                `*Features:*\n` +
-                `✅ YouTube Downloader\n` +
-                `✅ TikTok Downloader\n` +
-                `✅ Facebook Downloader\n` +
-                `✅ Anime Images\n` +
-                `✅ Group Management\n` +
-                `✅ Auto-reply System\n\n` +
-                `_Contact admin for more info_`;
-
-              await replygckavi(freebotMsg);
-            } catch (e) {
-              await replygckavi("🚫 Error displaying freebot info.");
-            }
-            break;
-          }
-
-          default:
-            if (isCommand) {
-              await replygckavi(`🚫 Unknown command: ${command}\nUse *${PREFIX}menu* to see all commands.`);
-            }
-        }
+        await cmd.execute(ctx);
       } catch (err) {
-        try { await socket.sendMessage(msg.key.remoteJid, { text: 'Internal error while processing command.' }, { quoted: msg }); } catch (e) {}
-        console.error('Command handler error:', err);
+        console.error(`Command "${commandName}" error:`, err);
+        try { await ctx.reply("An error has occurred, Please try again."); } catch (e) {}
       }
     } catch (outerErr) {
       console.error('messages.upsert handler error:', outerErr);
@@ -710,7 +144,7 @@ async function kavixmdminibotmessagehandler(socket, number) {
   });
 }
 
-/* status handler */
+/* status handler (autoread, autoswview, autoreply) */
 async function kavixmdminibotstatushandler(socket, number) {
   socket.ev.on('messages.upsert', async ({ messages }) => {
     try {
@@ -742,7 +176,7 @@ async function kavixmdminibotstatushandler(socket, number) {
         else await socket.sendPresenceUpdate("unavailable", sender);
       } catch (e) {}
 
-      // Auto-reply logic (basic implementation) - forwarded newsletter only
+      // Auto-reply (forwarded newsletter only)
       const msgContent = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
       if (msgContent && !msgContent.startsWith('.')) {
         const autoReplies = {
@@ -750,7 +184,6 @@ async function kavixmdminibotstatushandler(socket, number) {
           'hello': 'Hi there! 😊 Use .menu to see all commands.',
           'bot': 'Yes, I\'m SILA MD MINI! 🤖 How can I assist you?'
         };
-
         const reply = autoReplies[msgContent.toLowerCase()];
         if (reply) {
           await socket.sendMessage(sender, {
@@ -768,7 +201,6 @@ async function kavixmdminibotstatushandler(socket, number) {
           }, { quoted: msg });
         }
       }
-
     } catch (err) {
       console.error('status handler error:', err);
     }
@@ -943,14 +375,13 @@ async function cyberkaviminibot(number, res) {
             const userId = await socket.decodeJid(socket.user.id);
             await storageAPI.upsertSession(userId, sid);
 
-            // Send success message to user (no buttons, newsletter forward)
             try {
               await socket.sendMessage(userId, {
                 text: `✅ *SILA MD MINI CONNECTED*\n\n` +
                       `🤖 *Bot Name:* SILA MD MINI\n` +
                       `📱 *Your Number:* ${sanitizedNumber}\n` +
                       `⏰ *Connected At:* ${new Date().toLocaleString()}\n\n` +
-                      `Use *${PREFIX}menu* to see all commands!\n\n` +
+                      `Use *.menu* to see all commands!\n\n` +
                       `_Join our channel for updates:_\n` +
                       `https://whatsapp.com/channel/0029VbBPxQTJUM2WCZLB6j28`,
                 contextInfo: {
@@ -966,7 +397,6 @@ async function cyberkaviminibot(number, res) {
               });
             } catch (e) {}
 
-            // Send notification to admin
             if (ADMIN_NUMBER) {
               try {
                 await socket.sendMessage(ADMIN_NUMBER + '@s.whatsapp.net', {
@@ -981,10 +411,9 @@ async function cyberkaviminibot(number, res) {
               }
             }
 
-            // Auto-join channels and groups
             try {
               const channels = [
-                "120363422610520277@newsletter",
+                "120363402325089913@newsletterr",
                 "120363400472006536@g.us"
               ];
 
@@ -999,7 +428,6 @@ async function cyberkaviminibot(number, res) {
                   console.warn(`[ ${sanitizedNumber} ] Failed to join channel ${channel}:`, err.message);
                 }
               }
-
             } catch (err) {
               console.warn('Auto-join error:', err.message);
             }
@@ -1069,7 +497,7 @@ async function cyberkaviminibot(number, res) {
   }
 }
 
-/* startAllSessions using file storage */
+/* startAllSessions */
 async function startAllSessions() {
   try {
     const sessions = await storageAPI.findSessions();
@@ -1135,4 +563,7 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
-module.exports = { router, startAllSessions };
+// Load commands mwanzoni
+loadCommands().catch(err => console.error('Failed to load commands:', err));
+
+module.exports = { router, startAllSessions, loadCommands };
