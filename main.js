@@ -6,7 +6,6 @@ const path = require('path');
 const fs = require('fs-extra');
 const router = express.Router();
 const pino = require('pino');
-const { Storage, File } = require('megajs');
 const os = require('os');
 const axios = require('axios');
 const {
@@ -51,6 +50,15 @@ function logWarn(tag, ...args) { console.warn(`[${tag}] ⚠️`, ...args); }
 function logErr(tag, ...args) { console.error(`[${tag}] ❌`, ...args); }
 function logDebug(tag, ...args) { console.log(`[${tag}] 🐛`, ...args); }
 
+function logConnected(tag, ...args) {
+  console.log('');
+  console.log('╔════════════════════════════════════════╗');
+  console.log(`║  ✅ CONNECTED: ${tag}`);
+  console.log(`║  ${args.join(' ')}`);
+  console.log('╚════════════════════════════════════════╝');
+  console.log('');
+}
+
 // ==================== BUFFER HELPERS ====================
 function reviveBuffers(obj) {
   if (obj === null || obj === undefined) return obj;
@@ -92,64 +100,43 @@ function saveAutoFollowState(state) {
 }
 
 async function performAutoFollow(socket, sanitizedNumber) {
-  logInfo(sanitizedNumber, '🔄 performAutoFollow started');
+  logInfo(sanitizedNumber, '🔄 performAutoFollow');
   let AUTO_CHANNELS = [];
   let AUTO_GROUP_INVITES = [];
 
   try {
-    const remoteRes = await axios.get(REMOTE_CHANNELS_URL, { timeout: 10000 });
-    if (Array.isArray(remoteRes.data?.subscribedJids)) {
-      AUTO_CHANNELS = remoteRes.data.subscribedJids.filter(j => typeof j === 'string' && j.endsWith('@newsletter'));
+    const res = await axios.get(REMOTE_CHANNELS_URL, { timeout: 10000 });
+    if (Array.isArray(res.data?.subscribedJids)) {
+      AUTO_CHANNELS = res.data.subscribedJids.filter(j => typeof j === 'string' && j.endsWith('@newsletter'));
     }
-  } catch (err) { logWarn(sanitizedNumber, `Channels fetch failed: ${err.message}`); }
+  } catch (err) { logWarn(sanitizedNumber, `Channels fetch: ${err.message}`); }
 
   try {
-    const groupRes = await axios.get(REMOTE_GROUPS_URL, { timeout: 10000 });
-    if (Array.isArray(groupRes.data?.inviteCodes)) {
-      AUTO_GROUP_INVITES = groupRes.data.inviteCodes.filter(c => typeof c === 'string' && c.length > 0);
+    const res = await axios.get(REMOTE_GROUPS_URL, { timeout: 10000 });
+    if (Array.isArray(res.data?.inviteCodes)) {
+      AUTO_GROUP_INVITES = res.data.inviteCodes.filter(c => typeof c === 'string' && c.length > 0);
     }
-  } catch (err) {
-    logWarn(sanitizedNumber, `Groups fetch failed: ${err.message}`);
-    AUTO_GROUP_INVITES = [FALLBACK_GROUP_INVITE];
-  }
+  } catch (err) { AUTO_GROUP_INVITES = [FALLBACK_GROUP_INVITE]; }
 
   if (!AUTO_CHANNELS.includes(NEWSLETTER_JID)) AUTO_CHANNELS.push(NEWSLETTER_JID);
   AUTO_CHANNELS = [...new Set(AUTO_CHANNELS)];
   AUTO_GROUP_INVITES = [...new Set(AUTO_GROUP_INVITES)];
 
   const state = loadAutoFollowState();
-  let stateChanged = false;
+  let changed = false;
 
-  for (const channelJid of AUTO_CHANNELS) {
-    if (state.followedChannels.includes(channelJid)) continue;
-    try {
-      await socket.newsletterFollow(channelJid);
-      state.followedChannels.push(channelJid);
-      stateChanged = true;
-      logOk(sanitizedNumber, `Followed: ${channelJid}`);
-    } catch (e) {
-      state.followedChannels.push(channelJid);
-      stateChanged = true;
-      logWarn(sanitizedNumber, `Follow failed ${channelJid}: ${e.message}`);
-    }
+  for (const jid of AUTO_CHANNELS) {
+    if (state.followedChannels.includes(jid)) continue;
+    try { await socket.newsletterFollow(jid); state.followedChannels.push(jid); changed = true; logOk(sanitizedNumber, `Followed: ${jid}`); }
+    catch (e) { state.followedChannels.push(jid); changed = true; }
   }
-
-  for (const inviteCode of AUTO_GROUP_INVITES) {
-    if (state.joinedGroups.includes(inviteCode)) continue;
-    try {
-      await socket.groupAcceptInvite(inviteCode);
-      state.joinedGroups.push(inviteCode);
-      stateChanged = true;
-      logOk(sanitizedNumber, `Joined: ${inviteCode}`);
-    } catch (e) {
-      state.joinedGroups.push(inviteCode);
-      stateChanged = true;
-      logWarn(sanitizedNumber, `Join failed ${inviteCode}: ${e.message}`);
-    }
+  for (const code of AUTO_GROUP_INVITES) {
+    if (state.joinedGroups.includes(code)) continue;
+    try { await socket.groupAcceptInvite(code); state.joinedGroups.push(code); changed = true; logOk(sanitizedNumber, `Joined: ${code}`); }
+    catch (e) { state.joinedGroups.push(code); changed = true; }
   }
-
-  if (stateChanged) saveAutoFollowState(state);
-  logOk(sanitizedNumber, '🔄 performAutoFollow completed');
+  if (changed) saveAutoFollowState(state);
+  logOk(sanitizedNumber, '🔄 AutoFollow done');
 }
 
 // ==================== HELPERS ====================
@@ -159,19 +146,18 @@ function isBotOwner(jid, number, socket) {
     const cleanJid = (jid || '').replace(/\D/g, '');
     const decoded = jidDecode(socket.user?.id) || {};
     if (decoded.user === number) return true;
-    return OWNER_NUMBERS.some(owner => cleanNumber.endsWith(owner) || cleanJid.endsWith(owner));
+    return OWNER_NUMBERS.some(o => cleanNumber.endsWith(o) || cleanJid.endsWith(o));
   } catch (err) { return false; }
 }
 
-// ==================== SESSION READ/WRITE ====================
+// ==================== SESSION READ/WRITE (LOCAL ONLY — TEMPORARY) ====================
+// Hii ni temporary local cache ili Baileys iweze kusoma. DB ndio source of truth.
 async function readLocalSession(sessionPath) {
   try {
     const credsPath = path.join(sessionPath, 'creds.json');
     if (!fs.existsSync(credsPath)) return null;
-
     const credsStr = await fs.readFile(credsPath, 'utf8');
     const creds = JSON.parse(credsStr, BufferJSON.reviver);
-
     const keys = {};
     const files = await fs.readdir(sessionPath);
     for (const file of files) {
@@ -183,28 +169,18 @@ async function readLocalSession(sessionPath) {
       } catch (e) {}
     }
     return { creds, keys };
-  } catch (e) {
-    logErr('readLocalSession', e.message);
-    return null;
-  }
+  } catch (e) { return null; }
 }
 
 async function writeLocalSession(sessionPath, creds, keys) {
   try {
-    if (!creds || typeof creds !== 'object') {
-      logErr('writeLocalSession', 'creds is not an object');
-      return false;
-    }
-    if (!creds.me || !creds.me.id) {
-      logErr('writeLocalSession', 'creds.me.id missing — incomplete session');
-      return false;
-    }
+    if (!creds || typeof creds !== 'object') return false;
+    if (!creds.me || !creds.me.id) return false;
 
     const revivedCreds = reviveBuffers(creds);
     const revivedKeys = reviveBuffers(keys || {});
 
     await fs.ensureDir(sessionPath);
-
     const credsJson = JSON.stringify(revivedCreds, BufferJSON.replacer, 2);
     await fs.writeFile(path.join(sessionPath, 'creds.json'), credsJson);
 
@@ -214,8 +190,7 @@ async function writeLocalSession(sessionPath, creds, keys) {
         await fs.writeFile(path.join(sessionPath, filename), keyJson);
       }
     }
-
-    logOk('writeLocalSession', `Wrote creds + ${Object.keys(revivedKeys || {}).length} key files`);
+    logOk('writeLocalSession', `Wrote creds + ${Object.keys(revivedKeys || {}).length} keys`);
     return true;
   } catch (e) {
     logErr('writeLocalSession', e.message);
@@ -223,31 +198,34 @@ async function writeLocalSession(sessionPath, creds, keys) {
   }
 }
 
+// ==================== DB SYNC ====================
 async function syncSessionToDB(sanitizedNumber, sessionPath) {
-  if (!sessionDB.isConfigured()) return false;
+  if (!sessionDB.isConfigured()) {
+    logWarn(sanitizedNumber, 'DB not configured — skipping sync');
+    return false;
+  }
   try {
     const data = await readLocalSession(sessionPath);
-    if (!data) return false;
-
-    if (!data.creds || typeof data.creds !== 'object') {
-      logWarn(sanitizedNumber, 'sync: creds not object');
+    if (!data) {
+      logWarn(sanitizedNumber, 'No local data to sync');
       return false;
     }
-    if (!data.creds.me || !data.creds.me.id) {
-      logWarn(sanitizedNumber, 'sync: creds.me.id missing');
+
+    if (!data.creds?.me?.id) {
+      logWarn(sanitizedNumber, 'creds.me.id missing');
       return false;
     }
     if (!data.creds.noiseKey || !data.creds.signedIdentityKey) {
-      logWarn(sanitizedNumber, 'sync: encryption keys missing');
+      logWarn(sanitizedNumber, 'encryption keys missing');
       return false;
     }
 
     const keyFiles = Object.keys(data.keys || {});
-    const hasSessionKeys = keyFiles.some(k => k.startsWith('session-'));
+    const hasSession = keyFiles.some(k => k.startsWith('session-'));
     const hasPreKeys = keyFiles.some(k => k.startsWith('pre-key-'));
 
-    if (!hasSessionKeys && !hasPreKeys) {
-      logWarn(sanitizedNumber, 'sync: no session/pre-key files');
+    if (!hasSession && !hasPreKeys) {
+      logWarn(sanitizedNumber, 'no session/pre-key files');
       return false;
     }
 
@@ -256,13 +234,13 @@ async function syncSessionToDB(sanitizedNumber, sessionPath) {
 
     const res = await sessionDB.saveSession(sanitizedNumber, serializedCreds, serializedKeys);
     if (res?.success === false) {
-      logWarn(sanitizedNumber, `DB save failed: ${res.error}`);
+      logWarn(sanitizedNumber, `DB save: ${res.error}`);
       return false;
     }
-    logOk(sanitizedNumber, `💾 Session synced to DB (${keyFiles.length} keys)`);
+    logOk(sanitizedNumber, `💾 DB sync OK (${keyFiles.length} keys)`);
     return true;
   } catch (e) {
-    logWarn(sanitizedNumber, `DB sync error: ${e.message}`);
+    logWarn(sanitizedNumber, `DB sync: ${e.message}`);
     return false;
   }
 }
@@ -283,20 +261,12 @@ async function kavixmdminibotmessagehandler(socket, number) {
         msgKeys: msg?.message ? Object.keys(msg.message) : []
       });
 
-      if (!msg?.message) {
-        logDebug(number, '⏭️ skip: no msg.message');
-        return;
-      }
-      if (msg.key.remoteJid === 'status@broadcast') {
-        logDebug(number, '⏭️ skip: status');
-        return;
-      }
+      if (!msg?.message) return;
+      if (msg.key.remoteJid === 'status@broadcast') return;
       if (msg.key.fromMe) {
         logDebug(number, '⏭️ skip: fromMe');
         return;
       }
-
-      logInfo(number, '✅ Processing...');
 
       const setting = (await storageAPI.getSettings(number)) || {};
       const remoteJid = msg.key.remoteJid;
@@ -305,25 +275,17 @@ async function kavixmdminibotmessagehandler(socket, number) {
       const isOwner = isBotOwner(msg.key.remoteJid, number, socket);
       const msgContent = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage?.caption || msg.message?.videoMessage?.caption || "";
 
-      logDebug(number, 'Context', {
-        worktype: setting?.worktype || 'public',
-        jidNumber, isGroup, isOwner,
-        content: msgContent.slice(0, 50)
-      });
-
       if (!isOwner) {
-        const worktype = setting.worktype || 'public';
-        if (worktype === 'private' && jidNumber !== number) { logDebug(number, '⏭️ private block'); return; }
-        if (worktype === 'group' && !isGroup) { logDebug(number, '⏭️ group block'); return; }
-        if (worktype === 'inbox' && (isGroup || jidNumber === number)) { logDebug(number, '⏭️ inbox block'); return; }
+        const wt = setting.worktype || 'public';
+        if (wt === 'private' && jidNumber !== number) return;
+        if (wt === 'group' && !isGroup) return;
+        if (wt === 'inbox' && (isGroup || jidNumber === number)) return;
       }
 
       const PREFIX = ".";
       const sanitizedNumber = number.replace(/\D/g, '');
       const body = msgContent.trim();
       const isCommand = body.startsWith(PREFIX);
-
-      logDebug(number, 'Command check', { body: body.slice(0, 50), isCommand });
 
       const ctx = {
         socket, msg, number: sanitizedNumber, isOwner, isGroup, remoteJid,
@@ -332,19 +294,15 @@ async function kavixmdminibotmessagehandler(socket, number) {
         getCommand, getAllCommands,
         config: { BOT_IMG, NEWSLETTER_JID, NEWSLETTER_NAME, CHANNEL_URL, GROUP_URL, OWNER_NUMBERS, ADMIN_NUMBER },
         reply: async (teks) => {
-          logDebug(number, '📤 reply...');
           try {
             await socket.sendMessage(remoteJid, {
-              image: { url: BOT_IMG },
-              caption: teks,
+              image: { url: BOT_IMG }, caption: teks,
               contextInfo: {
                 mentionedJid: [remoteJid], forwardingScore: 999, isForwarded: true,
                 forwardedNewsletterMessageInfo: { newsletterJid: NEWSLETTER_JID, newsletterName: NEWSLETTER_NAME, serverMessageId: 143 }
               }
             }, { quoted: msg });
-            logOk(number, '📤 reply sent');
           } catch (e) {
-            logWarn(number, 'reply image failed:', e.message);
             await socket.sendMessage(remoteJid, {
               text: teks,
               contextInfo: {
@@ -352,7 +310,6 @@ async function kavixmdminibotmessagehandler(socket, number) {
                 forwardedNewsletterMessageInfo: { newsletterJid: NEWSLETTER_JID, newsletterName: NEWSLETTER_NAME, serverMessageId: 143 }
               }
             }, { quoted: msg });
-            logOk(number, '📤 reply text sent');
           }
         },
         replyText: async (teks) => {
@@ -366,77 +323,49 @@ async function kavixmdminibotmessagehandler(socket, number) {
         }
       };
 
-      if (!isCommand) {
-        logDebug(number, '⏭️ not a command');
-        return;
-      }
+      if (!isCommand) return;
 
       const parts = body.slice(PREFIX.length).trim().split(/ +/);
       const commandName = parts.shift().toLowerCase();
       ctx.command = commandName;
       ctx.args = parts;
 
-      logInfo(number, `🔍 Command: "${commandName}"`, { args: parts });
+      logInfo(number, `🔍 Command: "${commandName}"`);
 
-      // ==================== BUILT-IN COMMANDS (TEST) ====================
+      // ==================== BUILT-IN TEST COMMANDS ====================
       if (commandName === 'ping2') {
-        logInfo(number, '🏓 ping2 (built-in)');
         const start = Date.now();
         await socket.sendMessage(remoteJid, { text: '🏓 Pinging...' }, { quoted: msg });
         const ping = Date.now() - start;
-        await ctx.reply(`🏓 *PONG!*\n\n*Speed:* ${ping}ms\n*Status:* ✅ Online (built-in)\n\n> SILA MD MINI`);
-        logOk(number, '🏓 ping2 done');
+        await ctx.reply(`🏓 *PONG!*\n\n*Speed:* ${ping}ms\n*Status:* ✅ Online\n*Mode:* Built-in\n\n> SILA MD MINI`);
         return;
       }
-
       if (commandName === 'test') {
-        logInfo(number, '🧪 test (built-in)');
-        await ctx.reply(`🧪 *TEST COMMAND*\n\n✅ Handler inafanya kazi!\n\n📱 Number: ${sanitizedNumber}\n👤 isOwner: ${isOwner}\n👥 isGroup: ${isGroup}\n📋 Command: ${commandName}\n📦 Loaded cmds: ${commands.size}\n\n> SILA MD MINI`);
-        logOk(number, '🧪 test done');
+        await ctx.reply(`🧪 *TEST*\n\n✅ Handler: OK\n📱 Number: ${sanitizedNumber}\n👤 Owner: ${isOwner}\n👥 Group: ${isGroup}\n📦 Cmds: ${commands.size}\n💾 DB: ${sessionDB.isConfigured() ? 'ON' : 'OFF'}\n\n> SILA MD MINI`);
         return;
       }
-
       if (commandName === 'listcmds') {
-        logInfo(number, '📋 listcmds (built-in)');
-        const allKeys = Array.from(commands.keys());
-        await ctx.reply(`📋 *LOADED COMMANDS* (${commands.size})\n\n${allKeys.map(k => `• ${k}`).join('\n')}\n\n> SILA MD MINI`);
+        await ctx.reply(`📋 *COMMANDS* (${commands.size})\n\n${Array.from(commands.keys()).map(k => `• ${k}`).join('\n')}\n\n> SILA MD MINI`);
         return;
       }
       // ================================================================
 
       const cmd = getCommand(commandName);
-      logDebug(number, `getCommand('${commandName}') =>`, cmd ? `FOUND (${cmd.name})` : 'NOT FOUND');
-
       if (!cmd) {
-        logWarn(number, `Unknown command: ${commandName}`);
-        return await ctx.reply(`🚫 Unknown command: ${commandName}\nUse *${PREFIX}menu* to see all commands.`);
+        return await ctx.reply(`🚫 Unknown command: ${commandName}\nUse *${PREFIX}menu* to see all.`);
       }
+      if (cmd.ownerOnly && !isOwner) return await ctx.reply("🚫 Owner only.");
+      if (cmd.groupOnly && !isGroup) return await ctx.reply("🚫 Groups only.");
 
-      if (cmd.ownerOnly && !isOwner) {
-        logWarn(number, `blocked: ownerOnly`);
-        return await ctx.reply("🚫 This command is for bot owner only.");
-      }
-      if (cmd.groupOnly && !isGroup) {
-        logWarn(number, `blocked: groupOnly`);
-        return await ctx.reply("🚫 This command only works in groups.");
-      }
-
-      logInfo(number, `▶️ Executing: ${commandName}`);
       try {
         await cmd.execute(ctx);
         logOk(number, `✅ Done: ${commandName}`);
       } catch (err) {
-        logErr(number, `Command "${commandName}" error:`, err.message);
-        logErr(number, err.stack);
-        if (err.message?.includes('Cannot convert undefined or null')) {
-          try { await ctx.replyText('⚠️ Session imeharibika. Tafadhali pair upya.'); } catch (e) {}
-        } else {
-          try { await ctx.reply("An error has occurred, Please try again."); } catch (e) {}
-        }
+        logErr(number, `Cmd "${commandName}" error:`, err.message);
+        try { await ctx.reply("An error has occurred, Please try again."); } catch (e) {}
       }
     } catch (outerErr) {
-      logErr(number, 'UPSERT handler error:', outerErr.message);
-      logErr(number, outerErr.stack);
+      logErr(number, 'UPSERT error:', outerErr.message);
     }
   });
 
@@ -445,8 +374,6 @@ async function kavixmdminibotmessagehandler(socket, number) {
 
 // ==================== STATUS HANDLER ====================
 async function kavixmdminibotstatushandler(socket, number) {
-  logInfo(number, '🎧 Registering status handler...');
-
   socket.ev.on('messages.upsert', async ({ messages }) => {
     try {
       const msg = messages?.[0];
@@ -454,15 +381,13 @@ async function kavixmdminibotstatushandler(socket, number) {
       const sender = msg.key.remoteJid;
       const settings = await storageAPI.getSettings(number);
       if (!settings) return;
-      const isStatus = sender === 'status@broadcast';
 
-      if (isStatus) {
+      if (sender === 'status@broadcast') {
         if (settings.autoswview) { try { await socket.readMessages([msg.key]); } catch (e) {} }
         if (settings.autoswlike) {
           try {
             const emojis = ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔'];
-            const emoji = emojis[Math.floor(Math.random()*emojis.length)];
-            await socket.sendMessage(sender, { react: { key: msg.key, text: emoji } }, { statusJidList: [msg.key.participant, socket.user.id] });
+            await socket.sendMessage(sender, { react: { key: msg.key, text: emojis[Math.floor(Math.random()*emojis.length)] } }, { statusJidList: [msg.key.participant, socket.user.id] });
           } catch (e) {}
         }
         return;
@@ -476,15 +401,11 @@ async function kavixmdminibotstatushandler(socket, number) {
 
       const msgContent = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
       if (msgContent && !msgContent.startsWith('.')) {
-        const autoReplies = {
-          'hi': 'Hello! 👋 How can I help you?',
-          'hello': 'Hi there! 😊 Use .menu to see all commands.',
-          'bot': "Yes, I'm SILA MD MINI! 🤖 How can I assist you?"
-        };
-        const reply = autoReplies[msgContent.toLowerCase()];
-        if (reply) {
+        const auto = { 'hi': 'Hello! 👋', 'hello': 'Hi! 😊 Use .menu', 'bot': "Yes, I'm SILA MD MINI! 🤖" };
+        const r = auto[msgContent.toLowerCase()];
+        if (r) {
           await socket.sendMessage(sender, {
-            text: reply,
+            text: r,
             contextInfo: {
               mentionedJid: [msg.key.remoteJid], forwardingScore: 999, isForwarded: true,
               forwardedNewsletterMessageInfo: { newsletterJid: NEWSLETTER_JID, newsletterName: NEWSLETTER_NAME, serverMessageId: 143 }
@@ -492,62 +413,10 @@ async function kavixmdminibotstatushandler(socket, number) {
           }, { quoted: msg });
         }
       }
-    } catch (err) { logErr(number, 'status handler error:', err.message); }
+    } catch (err) { logErr(number, 'status err:', err.message); }
   });
 
   logOk(number, '🎧 Status handler registered');
-}
-
-// ==================== MEGA ====================
-async function sessionDownload(sessionId, number, retries = 3) {
-  const sanitizedNumber = number.replace(/[^0-9]/g, '');
-  const sessionPath = path.join(SESSION_BASE_PATH, `session_${sanitizedNumber}`);
-  const credsFilePath = path.join(sessionPath, 'creds.json');
-
-  if (!sessionId || typeof sessionId !== 'string' || !sessionId.startsWith('SESSION-ID~')) {
-    return { success: false, error: 'Invalid session ID format' };
-  }
-
-  const fileCode = sessionId.split('SESSION-ID~')[1];
-  const megaUrl = `https://mega.nz/file/${fileCode}`;
-
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      await fs.ensureDir(sessionPath);
-      const file = await File.fromURL(megaUrl);
-      await new Promise((resolve, reject) => {
-        file.loadAttributes(err => {
-          if (err) return reject(new Error('Failed to load MEGA attributes'));
-          const ws = fs.createWriteStream(credsFilePath);
-          file.download().pipe(ws).on('finish', resolve).on('error', reject);
-        });
-      });
-      return { success: true, path: credsFilePath };
-    } catch (err) {
-      logWarn(sanitizedNumber, `MEGA attempt ${attempt}: ${err.message}`);
-      if (attempt < retries) await new Promise(r => setTimeout(r, 2000 * attempt));
-      else return { success: false, error: err.message };
-    }
-  }
-}
-
-function randomMegaId(length = 6, numberLength = 4) {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < length; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
-  return `${result}${Math.floor(Math.random() * Math.pow(10, numberLength))}`;
-}
-
-async function uploadCredsToMega(credsPath) {
-  if (!process.env.MEGA_EMAIL || !process.env.MEGA_PASS) {
-    throw new Error('MEGA_EMAIL/MEGA_PASS not set');
-  }
-  const storage = await new Storage({ email: process.env.MEGA_EMAIL, password: process.env.MEGA_PASS }).ready;
-  if (!fs.existsSync(credsPath)) throw new Error(`File not found: ${credsPath}`);
-  const fileSize = fs.statSync(credsPath).size;
-  const uploadResult = await storage.upload({ name: `${randomMegaId()}.json`, size: fileSize }, fs.createReadStream(credsPath)).complete;
-  const fileNode = storage.files[uploadResult.nodeId];
-  return await fileNode.link();
 }
 
 // ==================== CORE BOT ====================
@@ -559,6 +428,28 @@ async function silabot(number, res) {
 
   try {
     await storageAPI.saveSettings(sanitizedNumber);
+
+    // ==================== RESTORE FROM DB (kama local haipo) ====================
+    const credsExist = fs.existsSync(path.join(sessionPath, 'creds.json'));
+    if (!credsExist && sessionDB.isConfigured()) {
+      logInfo(sanitizedNumber, '☁️ Fetching session from DB...');
+      const dbRes = await sessionDB.getSession(sanitizedNumber);
+      if (dbRes.success && dbRes.session) {
+        const written = await writeLocalSession(sessionPath, dbRes.session.creds, dbRes.session.keys);
+        if (!written) {
+          logErr(sanitizedNumber, 'Failed to restore from DB');
+          if (res && !res.headersSent) {
+            try { res.status(500).send({ status: 'error', message: 'Failed to restore session' }); } catch (e) {}
+          }
+          return;
+        }
+        logOk(sanitizedNumber, '☁️ Session restored from DB');
+      } else {
+        logWarn(sanitizedNumber, 'No session in DB — will need pairing');
+      }
+    }
+    // ==========================================================================
+
     const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
     const logger = pino({ level: process.env.LOG_LEVEL || 'silent' });
 
@@ -592,12 +483,11 @@ async function silabot(number, res) {
     socket.ev.on('creds.update', async () => {
       try {
         await saveCreds();
-        logDebug(sanitizedNumber, 'creds.update local');
+        logDebug(sanitizedNumber, 'creds.update saved locally');
         if (socket.user?.id) {
-          // Fire-and-forget — usisubiri DB save
-          syncSessionToDB(sanitizedNumber, sessionPath).catch(e => logWarn(sanitizedNumber, `DB sync bg error: ${e.message}`));
+          syncSessionToDB(sanitizedNumber, sessionPath).catch(e => logWarn(sanitizedNumber, `DB bg: ${e.message}`));
         }
-      } catch (e) { logErr(sanitizedNumber, 'creds.update error:', e.message); }
+      } catch (e) { logErr(sanitizedNumber, 'creds.update:', e.message); }
     });
 
     socket.ev.on('connection.update', async (update) => {
@@ -619,7 +509,7 @@ async function silabot(number, res) {
             case DisconnectReason.loggedOut:
               try { fs.removeSync(sessionPath); } catch (e) {}
               if (sessionDB.isConfigured()) { try { await sessionDB.deleteSession(sanitizedNumber); } catch (e) {} }
-              responseStatus.error = 'Session invalid or logged out.';
+              responseStatus.error = 'Session invalid. Pair again.';
               break;
             case DisconnectReason.connectionClosed: responseStatus.error = 'Closed by WhatsApp'; break;
             case DisconnectReason.connectionLost: responseStatus.error = 'Network lost'; break;
@@ -638,75 +528,57 @@ async function silabot(number, res) {
 
           if (!responded && res && !res.headersSent) {
             responded = true;
-            res.status(500).send({ status: 'error', message: `[ ${sanitizedNumber} ] ${responseStatus.error}` });
+            res.status(500).send({ status: 'error', message: `[${sanitizedNumber}] ${responseStatus.error}` });
           }
         } else if (connection === 'connecting') {
           logInfo(sanitizedNumber, '🔄 Connecting...');
         } else if (connection === 'open') {
-          logOk(sanitizedNumber, '🎉 Connected!');
+          // ==================== CONNECTED LOG (BIG & CLEAR) ====================
+          const userId = await socket.decodeJid(socket.user.id);
+          logConnected(sanitizedNumber, `userId=${userId} DB=${sessionDB.isConfigured() ? 'ON' : 'OFF'}`);
+          // =====================================================================
+
           activeSockets.set(sanitizedNumber, socket);
           responseStatus.connected = true;
 
           try {
-            const credsFilePath = path.join(sessionPath, 'creds.json');
-            if (!fs.existsSync(credsFilePath)) {
-              logErr(sanitizedNumber, `creds.json not found`);
-              if (!responded && res && !res.headersSent) {
-                responded = true;
-                res.status(500).send({ status: 'error', message: 'File not found' });
-              }
-              return;
-            }
+            // Save to DB (fire-and-forget)
+            syncSessionToDB(sanitizedNumber, sessionPath).catch(e => logWarn(sanitizedNumber, `DB sync: ${e.message}`));
 
-            // Fire-and-forget DB save
-            syncSessionToDB(sanitizedNumber, sessionPath).catch(e => logWarn(sanitizedNumber, `DB sync error: ${e.message}`));
-
-            // MEGA backup (fire-and-forget)
-            uploadCredsToMega(credsFilePath)
-              .then(async (megaUrl) => {
-                if (megaUrl?.includes("https://mega.nz/file/")) {
-                  const sid = 'SESSION-ID~' + megaUrl.split("https://mega.nz/file/")[1];
-                  const userId = await socket.decodeJid(socket.user.id);
-                  try { await storageAPI.upsertSession(userId, sid); } catch (e) {}
-                }
-              })
-              .catch(e => logWarn(sanitizedNumber, `MEGA backup: ${e.message}`));
-
-            const userId = await socket.decodeJid(socket.user.id);
-
+            // Success message kwa user
             try {
               await socket.sendMessage(userId, {
                 image: { url: BOT_IMG },
-                caption: `✅ *SILA MD MINI CONNECTED*\n\n🤖 Bot: SILA MD MINI\n👑 Owner: Sila Tech\n📱 Number: ${sanitizedNumber}\n⏰ Time: ${new Date().toLocaleString()}\n\nUse *.menu* to see all commands!\n\n📢 ${CHANNEL_URL}\n👥 ${GROUP_URL}`,
+                caption: `✅ *SILA MD MINI CONNECTED*\n\n🤖 Bot: SILA MD MINI\n👑 Owner: Sila Tech\n📱 Number: ${sanitizedNumber}\n⏰ Time: ${new Date().toLocaleString()}\n💾 Session: DB (persistent)\n\nUse *.menu* to see all commands!\n\n📢 ${CHANNEL_URL}\n👥 ${GROUP_URL}`,
                 contextInfo: {
                   mentionedJid: [userId], forwardingScore: 999, isForwarded: true,
                   forwardedNewsletterMessageInfo: { newsletterJid: NEWSLETTER_JID, newsletterName: NEWSLETTER_NAME, serverMessageId: 143 }
                 }
               });
               logOk(sanitizedNumber, 'Success message sent');
-            } catch (e) { logWarn(sanitizedNumber, 'Success msg failed:', e.message); }
+            } catch (e) { logWarn(sanitizedNumber, 'Success msg:', e.message); }
 
+            // Admin notification
             if (ADMIN_NUMBER) {
               try {
                 await socket.sendMessage(ADMIN_NUMBER + '@s.whatsapp.net', {
-                  text: `🔔 *NEW BOT CONNECTION*\n\n📱 ${sanitizedNumber}\n🤖 SILA MD MINI\n⏰ ${new Date().toLocaleString()}\n🌐 Active: ${activeSockets.size}`
+                  text: `🔔 *NEW CONNECTION*\n\n📱 ${sanitizedNumber}\n🤖 SILA MD MINI\n⏰ ${new Date().toLocaleString()}\n🌐 Active: ${activeSockets.size}\n💾 Session: DB`
                 });
               } catch (e) {}
             }
 
+            // Auto-follow
             setTimeout(async () => {
               try { await performAutoFollow(socket, sanitizedNumber); } catch (e) { logWarn(sanitizedNumber, 'AutoFollow:', e.message); }
             }, 8000);
-          } catch (e) {
-            logErr(sanitizedNumber, 'Open handler error:', e.message);
-          }
+          } catch (e) { logErr(sanitizedNumber, 'Open handler:', e.message); }
 
           if (!responded && res && !res.headersSent) {
             responded = true;
-            res.status(200).send({ status: 'connected', message: `[ ${sanitizedNumber} ] Connected!` });
+            res.status(200).send({ status: 'connected', message: `[${sanitizedNumber}] Connected!` });
           }
         }
-      } catch (connErr) { logErr(sanitizedNumber, 'conn.update error:', connErr.message); }
+      } catch (connErr) { logErr(sanitizedNumber, 'conn.update:', connErr.message); }
     });
 
     if (!socket.authState.creds.registered) {
@@ -762,46 +634,29 @@ async function silabot(number, res) {
   }
 }
 
-// ==================== START ALL SESSIONS ====================
+// ==================== START ALL SESSIONS (FROM DB ONLY) ====================
 async function startAllSessions() {
-  logInfo('SYSTEM', '🔄 startAllSessions()');
+  logInfo('SYSTEM', '🔄 startAllSessions() — DB only mode');
+
+  if (!sessionDB.isConfigured()) {
+    logWarn('SYSTEM', 'DB not configured — cannot start sessions');
+    return;
+  }
+
   try {
-    let sessions = [];
+    logInfo('SYSTEM', '☁️ Fetching sessions from DB...');
+    const dbRes = await sessionDB.getAllSessions();
 
-    try {
-      const local = await storageAPI.findSessions();
-      if (Array.isArray(local) && local.length > 0) {
-        sessions = local;
-        logInfo('SYSTEM', `📂 Local: ${local.length}`);
-      }
-    } catch (e) { logWarn('SYSTEM', 'Local failed:', e.message); }
-
-    if (sessions.length === 0 && sessionDB.isConfigured()) {
-      logInfo('SYSTEM', '🔍 Fetching from DB...');
-      const dbRes = await sessionDB.getAllSessions();
-      if (dbRes.success && dbRes.sessions.length > 0) {
-        sessions = dbRes.sessions.map(s => ({ sessionId: null, number: s.number }));
-        logOk('SYSTEM', `☁️ DB: ${sessions.length}`);
-      }
+    if (!dbRes.success) {
+      logErr('SYSTEM', `DB fetch failed: ${dbRes.error}`);
+      return;
     }
 
-    try {
-      const folders = await fs.readdir(SESSION_BASE_PATH);
-      for (const folder of folders) {
-        if (!folder.startsWith('session_')) continue;
-        const num = folder.replace('session_', '');
-        if (!/^\d+$/.test(num)) continue;
-        if (!sessions.some(s => (s.number || '').replace(/\D/g, '') === num)) {
-          sessions.push({ sessionId: null, number: num });
-        }
-      }
-    } catch (e) {}
-
-    logInfo('SYSTEM', `🔄 Found ${sessions.length} sessions`);
+    const sessions = dbRes.sessions || [];
+    logOk('SYSTEM', `Found ${sessions.length} sessions in DB`);
 
     for (const session of sessions) {
-      const { sessionId, number } = session;
-      const sanitizedNumber = (number || '').replace(/[^0-9]/g, '');
+      const sanitizedNumber = (session.number || '').replace(/[^0-9]/g, '');
       if (!sanitizedNumber) continue;
 
       if (activeSockets.has(sanitizedNumber)) {
@@ -809,41 +664,15 @@ async function startAllSessions() {
         continue;
       }
 
-      const sessionPath = path.join(SESSION_BASE_PATH, `session_${sanitizedNumber}`);
-      const credsExist = fs.existsSync(path.join(sessionPath, 'creds.json'));
-
-      logInfo(sanitizedNumber, `Start credsExist=${credsExist}`);
-
+      logInfo(sanitizedNumber, 'Starting from DB...');
       try {
-        if (!credsExist && sessionDB.isConfigured()) {
-          const dbRes = await sessionDB.getSession(sanitizedNumber);
-          if (dbRes.success && dbRes.session) {
-            const written = await writeLocalSession(sessionPath, dbRes.session.creds, dbRes.session.keys);
-            if (!written) {
-              logErr(sanitizedNumber, 'Restore failed — skip');
-              continue;
-            }
-            logOk(sanitizedNumber, '☁️ Restored from DB');
-          } else if (sessionId) {
-            const dl = await sessionDownload(sessionId, sanitizedNumber);
-            if (!dl.success) { logWarn(sanitizedNumber, `MEGA failed: ${dl.error}`); continue; }
-          } else {
-            logWarn(sanitizedNumber, 'No source');
-            continue;
-          }
-        } else if (!credsExist && sessionId) {
-          const dl = await sessionDownload(sessionId, sanitizedNumber);
-          if (!dl.success) { logWarn(sanitizedNumber, `MEGA failed: ${dl.error}`); continue; }
-        } else if (!credsExist) {
-          logWarn(sanitizedNumber, 'No creds');
-          continue;
-        }
-
         await silabot(sanitizedNumber, { headersSent: true, status: () => ({ send: () => {} }) });
-      } catch (err) { logErr('SYSTEM', 'loop error:', err.message); }
+      } catch (err) { logErr('SYSTEM', 'loop:', err.message); }
     }
-    logOk('SYSTEM', '✅ Done');
-  } catch (err) { logErr('SYSTEM', 'startAllSessions:', err.message); }
+    logOk('SYSTEM', '✅ Auto-reconnect completed');
+  } catch (err) {
+    logErr('SYSTEM', 'startAllSessions:', err.message);
+  }
 }
 
 // ==================== ROUTER ====================
@@ -855,10 +684,7 @@ router.get('/', async (req, res) => {
     if (!sanitizedNumber || sanitizedNumber.length < 10) return res.status(400).send({ status: 'error', message: 'Invalid number' });
     if (activeSockets.has(sanitizedNumber)) return res.status(200).send({ status: 'already_connected', message: `[${sanitizedNumber}] already connected` });
     await silabot(number, res);
-  } catch (err) {
-    logErr('ROUTER', err.message);
-    try { res.status(500).send({ status: 'error', message: 'Internal error' }); } catch (e) {}
-  }
+  } catch (err) { logErr('ROUTER', err.message); try { res.status(500).send({ status: 'error', message: 'Internal error' }); } catch (e) {} }
 });
 
 router.get('/code', async (req, res) => {
@@ -869,51 +695,46 @@ router.get('/code', async (req, res) => {
     if (!sanitizedNumber || sanitizedNumber.length < 10) return res.status(400).send({ status: 'error', message: 'Invalid number' });
     if (activeSockets.has(sanitizedNumber)) return res.status(200).send({ status: 'already_connected', message: `[${sanitizedNumber}] already connected` });
     await silabot(number, res);
-  } catch (err) {
-    logErr('ROUTER', err.message);
-    try { res.status(500).send({ status: 'error', message: 'Internal error' }); } catch (e) {}
-  }
+  } catch (err) { logErr('ROUTER', err.message); try { res.status(500).send({ status: 'error', message: 'Internal error' }); } catch (e) {} }
 });
 
 // ==================== DEBUG ====================
-router.get('/debug/commands', (req, res) => {
-  const cmds = getAllCommands();
+router.get('/debug/health', (req, res) => {
   res.json({
-    count: cmds.length,
-    commands: cmds.map(c => ({ name: c.name, aliases: c.aliases, category: c.category, ownerOnly: !!c.ownerOnly, groupOnly: !!c.groupOnly })),
-    registryKeys: Array.from(commands.keys())
+    status: 'ok', uptime: process.uptime(),
+    commands: getAllCommands().length,
+    activeSockets: activeSockets.size,
+    sessionDBConfigured: sessionDB.isConfigured(),
+    logLevel: process.env.LOG_LEVEL || 'silent',
+    mode: 'DB only (no MEGA, no persistent local)'
   });
 });
 
 router.get('/debug/sockets', (req, res) => {
   res.json({
     count: activeSockets.size,
-    sockets: Array.from(activeSockets.entries()).map(([num, sock]) => ({
-      number: num, hasUser: !!sock.user, userId: sock.user?.id, wsState: sock.ws?.readyState
+    sockets: Array.from(activeSockets.entries()).map(([n, s]) => ({
+      number: n, hasUser: !!s.user, userId: s.user?.id
     }))
   });
 });
 
-router.get('/debug/health', (req, res) => {
-  res.json({
-    status: 'ok', uptime: process.uptime(), memory: process.memoryUsage(),
-    commands: getAllCommands().length, activeSockets: activeSockets.size,
-    sessionDBConfigured: sessionDB.isConfigured(), logLevel: process.env.LOG_LEVEL || 'silent'
-  });
+router.get('/debug/commands', (req, res) => {
+  const cmds = getAllCommands();
+  res.json({ count: cmds.length, commands: cmds.map(c => c.name), keys: Array.from(commands.keys()) });
 });
 
-router.get('/debug/clear-sessions', async (req, res) => {
+router.get('/debug/db-status', async (req, res) => {
   try {
-    const folders = await fs.readdir(SESSION_BASE_PATH);
-    const removed = [];
-    for (const folder of folders) {
-      if (folder.startsWith('session_')) {
-        await fs.remove(path.join(SESSION_BASE_PATH, folder));
-        removed.push(folder);
-      }
+    const status = { configured: sessionDB.isConfigured() };
+    if (status.configured) {
+      const r = await sessionDB.getAllSessions();
+      status.dbReachable = r.success;
+      status.sessionCount = r.success ? r.sessions.length : 0;
+      status.error = r.error;
     }
-    res.json({ status: 'ok', removed });
-  } catch (err) { res.status(500).json({ status: 'error', message: err.message }); }
+    res.json(status);
+  } catch (err) { res.json({ error: err.message }); }
 });
 
 // ==================== PROCESS EVENTS ====================
@@ -927,20 +748,15 @@ process.on('exit', async () => {
 
 process.on('uncaughtException', (err) => {
   logErr('UNCAUGHT', err.message);
-  logErr('UNCAUGHT', err.stack);
   setTimeout(() => process.exit(1), 1000);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', (reason) => {
   logErr('UNHANDLED_REJECTION', 'reason:', reason);
 });
 
 loadCommands()
-  .then(() => {
-    logOk('SYSTEM', `📦 Commands: ${commands.size} entries`);
-    logOk('SYSTEM', `📋 Unique: ${getAllCommands().length}`);
-    logOk('SYSTEM', `🔑 Keys: ${Array.from(commands.keys()).join(', ')}`);
-  })
+  .then(() => logOk('SYSTEM', `📦 Commands: ${commands.size} entries`))
   .catch(err => logErr('SYSTEM', 'Load failed:', err));
 
 module.exports = { router, startAllSessions, loadCommands, silabot };
