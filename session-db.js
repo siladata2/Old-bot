@@ -2,7 +2,7 @@
 const axios = require('axios');
 
 // ==================== CONFIG (NDANI YA CODE) ====================
-const DB_URL = 'https://aaaaaasiladb-7124d05da8fc.herokuapp.com';
+const DB_URL = 'https://siladb.onrender.com';
 const DB_API_KEY = 'silatech22';
 
 const headers = { 'x-api-key': DB_API_KEY };
